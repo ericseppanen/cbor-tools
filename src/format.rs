@@ -113,7 +113,7 @@ impl EncodeSymbolic for CborType {
 // This is the canonical encoding.
 fn encode_integer(x: &Integer) -> Vec<Element> {
     let element = match *x {
-        Integer::U8(n) if n < 24 => Element::new(Major::Uint, AdnInfo(n), Nada),
+        Integer::U5(n) => Element::new(Major::Uint, AdnInfo(*n), Nada),
         Integer::U8(n) => Element::new(Major::Uint, AdnInfo::MORE1, vec![n]),
         Integer::U16(n) => {
             let mut buf = [0u8; 2];
@@ -130,7 +130,7 @@ fn encode_integer(x: &Integer) -> Vec<Element> {
             NetworkEndian::write_u64(&mut buf, n);
             Element::new(Major::Uint, AdnInfo::MORE8, buf)
         }
-        Integer::N8(n) if n < 24 => Element::new(Major::Nint, AdnInfo(n), Nada),
+        Integer::N5(n) => Element::new(Major::Nint, AdnInfo(*n), Nada),
         Integer::N8(n) => Element::new(Major::Nint, AdnInfo::MORE1, vec![n]),
         Integer::N16(n) => {
             let mut buf = [0u8; 2];
@@ -159,8 +159,15 @@ impl Encode for Vec<Element> {
 
 impl Encode for Element {
     fn encode(&self) -> Vec<u8> {
+        let major = self.major as u8;
+        if major > 7 {
+            panic!("major out of range");
+        }
+        if self.adn_info.0 > 31 {
+            panic!("additional-info out of range");
+        }
         let mut buf = Vec::with_capacity(1 + self.bytes.len());
-        buf.push((self.major as u8) << 5 | self.adn_info.0);
+        buf.push(major << 5 | self.adn_info.0);
         buf.extend(&self.bytes);
         buf
     }
