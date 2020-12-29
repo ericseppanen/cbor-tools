@@ -110,7 +110,10 @@ impl EncodeSymbolic for CborType {
     }
 }
 
-// This is the canonical encoding.
+/// Encode an integer.
+///
+/// This does not attempt to canonicalize the integer size; a small number stored
+/// as an Integer::U32, for example, will be encoded as 5 bytes.
 fn encode_integer(x: &Integer) -> Vec<Element> {
     let element = match *x {
         Integer::U5(n) => Element::new(Major::Uint, AdnInfo(*n), Nada),

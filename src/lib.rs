@@ -1,6 +1,6 @@
-use std::{convert::TryFrom, ops::Deref};
-
 use half::f16;
+use std::fmt;
+use std::{convert::TryFrom, ops::Deref};
 
 pub mod format;
 
@@ -8,7 +8,7 @@ pub mod format;
 ///
 /// CBOR major type 0: unsigned integer
 /// CBOR major type 1: negative integer
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Integer {
     U5(ZeroTo23), // FIXME: use some bit-field crate?
     U8(u8),
@@ -27,7 +27,62 @@ pub enum Integer {
     N64(u64),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+// A crutch to assist with debug-printing of negative integers,
+// which are stored in an inconvenient format.
+struct DebugNeg<T: fmt::Debug>(T);
+
+impl<T> fmt::Debug for DebugNeg<T>
+where
+    T: fmt::Debug + Copy + Into<u128>,
+{
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        // CBOR negative values are an offset from -1.
+        let x = 1u128 + self.0.into();
+        write!(formatter, "-{:?}", x)
+    }
+}
+
+impl fmt::Debug for Integer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut builder = f.debug_struct("Integer");
+        match self {
+            Integer::U5(x) => {
+                builder.field("U5", &x.0);
+            }
+            Integer::U8(x) => {
+                builder.field("U8", &x);
+            }
+            Integer::U16(x) => {
+                builder.field("U16", &x);
+            }
+            Integer::U32(x) => {
+                builder.field("U32", &x);
+            }
+            Integer::U64(x) => {
+                builder.field("U64", &x);
+            }
+            Integer::N5(x) => {
+                let x: u8 = **x;
+                builder.field("N5", &DebugNeg(x));
+            }
+            Integer::N8(x) => {
+                builder.field("N8", &DebugNeg(*x));
+            }
+            Integer::N16(x) => {
+                builder.field("N16", &DebugNeg(*x));
+            }
+            Integer::N32(x) => {
+                builder.field("N32", &DebugNeg(*x));
+            }
+            Integer::N64(x) => {
+                builder.field("N64", &DebugNeg(*x));
+            }
+        }
+        builder.finish()
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
 pub struct ZeroTo23(u8);
 
 impl ZeroTo23 {
@@ -112,6 +167,8 @@ impl From<i16> for Integer {
     fn from(x: i16) -> Self {
         if x >= 0 {
             Integer::from(x as u16)
+        } else if x > -25 {
+            Integer::N5(ZeroTo23::new((-1 - x) as u8))
         } else if x > -0x101 {
             Integer::N8((-1 - x) as u8)
         } else {
@@ -123,7 +180,9 @@ impl From<i16> for Integer {
 impl From<i32> for Integer {
     fn from(x: i32) -> Self {
         if x >= 0 {
-            Integer::from(x as u16)
+            Integer::from(x as u32)
+        } else if x > -25 {
+            Integer::N5(ZeroTo23::new((-1 - x) as u8))
         } else if x > -0x101 {
             Integer::N8((-1 - x) as u8)
         } else if x > -0x10001 {
@@ -137,7 +196,9 @@ impl From<i32> for Integer {
 impl From<i64> for Integer {
     fn from(x: i64) -> Self {
         if x >= 0 {
-            Integer::from(x as u16)
+            Integer::from(x as u64)
+        } else if x > -25 {
+            Integer::N5(ZeroTo23::new((-1 - x) as u8))
         } else if x > -0x101 {
             Integer::N8((-1 - x) as u8)
         } else if x > -0x10001 {
@@ -230,6 +291,18 @@ where
 {
     fn from(x: T) -> Self {
         CborType::Integer(x.into())
+    }
+}
+
+impl From<ByteString> for CborType {
+    fn from(x: ByteString) -> CborType {
+        CborType::ByteString(x)
+    }
+}
+
+impl From<TextString> for CborType {
+    fn from(x: TextString) -> CborType {
+        CborType::TextString(x)
     }
 }
 
@@ -366,5 +439,59 @@ mod test {
         // Too big for Integer
         Integer::try_from((u64::MAX as i128) + 1).unwrap_err();
         Integer::try_from(-2 - (u64::MAX as i128)).unwrap_err();
+    }
+
+    #[test]
+    fn int_debug() {
+        let s = format!("{:?}", Integer::from(0));
+        assert_eq!(s, "Integer { U5: 0 }");
+
+        let s = format!("{:?}", Integer::from(23));
+        assert_eq!(s, "Integer { U5: 23 }");
+
+        let s = format!("{:?}", Integer::from(24));
+        assert_eq!(s, "Integer { U8: 24 }");
+
+        let s = format!("{:?}", Integer::from(256));
+        assert_eq!(s, "Integer { U16: 256 }");
+
+        let s = format!("{:?}", Integer::from(65536));
+        assert_eq!(s, "Integer { U32: 65536 }");
+
+        let s = format!("{:?}", Integer::from(1000000000000u64));
+        assert_eq!(s, "Integer { U64: 1000000000000 }");
+
+        let s = format!("{:?}", Integer::from(-1));
+        assert_eq!(s, "Integer { N5: -1 }");
+
+        let s = format!("{:?}", Integer::from(-24));
+        assert_eq!(s, "Integer { N5: -24 }");
+
+        let s = format!("{:?}", Integer::from(-25));
+        assert_eq!(s, "Integer { N8: -25 }");
+
+        let s = format!("{:?}", Integer::from(-256));
+        assert_eq!(s, "Integer { N8: -256 }");
+
+        let s = format!("{:?}", Integer::from(-257));
+        assert_eq!(s, "Integer { N16: -257 }");
+
+        let s = format!("{:?}", Integer::from(-65536));
+        assert_eq!(s, "Integer { N16: -65536 }");
+
+        let s = format!("{:?}", Integer::from(-65537));
+        assert_eq!(s, "Integer { N32: -65537 }");
+
+        let s = format!("{:?}", Integer::from(-1i64 << 32));
+        assert_eq!(s, "Integer { N32: -4294967296 }");
+
+        let s = format!("{:?}", Integer::from((-1i64 << 32) - 1));
+        assert_eq!(s, "Integer { N64: -4294967297 }");
+
+        let s = format!("{:?}", Integer::from(-1000000000000i64));
+        assert_eq!(s, "Integer { N64: -1000000000000 }");
+
+        let s = format!("{:?}", Integer::try_from(-(u64::MAX as i128)).unwrap());
+        assert_eq!(s, "Integer { N64: -18446744073709551615 }");
     }
 }
