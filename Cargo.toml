@@ -1,0 +1,12 @@
+[package]
+name = "cbor-tools"
+version = "0.1.0"
+authors = ["Eric Seppanen <eds@reric.net>"]
+edition = "2018"
+
+[dependencies]
+half = "1.6"
+byteorder = "1.3"
+
+[dev-dependencies]
+hex-literal = "0.3"
