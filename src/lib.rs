@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 use half::f16;
 
 pub mod format;
@@ -12,10 +14,15 @@ pub enum Integer {
     U16(u16),
     U32(u32),
     U64(u64),
-    I8(i8),
-    I16(i16),
-    I32(i32),
-    I64(i64),
+    // Because negative integers have a broader range than
+    // signed integers, they are pre-encoded as a negative
+    // offset from -1.
+    // FIXME: need a custom Debug implementation that understands
+    // the offset, otherwise this will be confusing.
+    N8(u8),
+    N16(u16),
+    N32(u32),
+    N64(u64),
 }
 
 impl From<u8> for Integer {
@@ -30,6 +37,113 @@ impl From<u16> for Integer {
             Integer::from(x as u8)
         } else {
             Integer::U16(x)
+        }
+    }
+}
+
+impl From<u32> for Integer {
+    fn from(x: u32) -> Self {
+        if x < 0x100 {
+            Integer::from(x as u8)
+        } else if x < 0x10000 {
+            Integer::from(x as u16)
+        } else {
+            Integer::U32(x)
+        }
+    }
+}
+
+impl From<u64> for Integer {
+    fn from(x: u64) -> Self {
+        if x < 0x100 {
+            Integer::from(x as u8)
+        } else if x < 0x1000000 {
+            Integer::from(x as u16)
+        } else if x < 0x10000 {
+            Integer::from(x as u32)
+        } else {
+            Integer::U64(x)
+        }
+    }
+}
+
+impl From<i8> for Integer {
+    fn from(x: i8) -> Self {
+        if x >= 0 {
+            Integer::from(x as u8)
+        } else {
+            Integer::N8((-1 - x) as u8)
+        }
+    }
+}
+
+impl From<i16> for Integer {
+    fn from(x: i16) -> Self {
+        if x >= 0 {
+            Integer::from(x as u16)
+        } else if x > -0x101 {
+            Integer::N8((-1 - x) as u8)
+        } else {
+            Integer::N16((-1 - x) as u16)
+        }
+    }
+}
+
+impl From<i32> for Integer {
+    fn from(x: i32) -> Self {
+        if x >= 0 {
+            Integer::from(x as u16)
+        } else if x > -0x101 {
+            Integer::N8((-1 - x) as u8)
+        } else if x > -0x10001 {
+            Integer::N16((-1 - x) as u16)
+        } else {
+            Integer::N32((-1 - x) as u32)
+        }
+    }
+}
+
+impl From<i64> for Integer {
+    fn from(x: i64) -> Self {
+        if x >= 0 {
+            Integer::from(x as u16)
+        } else if x > -0x101 {
+            Integer::N8((-1 - x) as u8)
+        } else if x > -0x10001 {
+            Integer::N16((-1 - x) as u16)
+        } else if x > -0x1000001 {
+            Integer::N32((-1 - x) as u32)
+        } else {
+            Integer::N64((-1 - x) as u64)
+        }
+    }
+}
+
+// In CBOR, only 64-bit positive and negative integers are supported.
+// If your integer is out of this range, use a byte-stream instead.
+#[derive(Clone, Copy, Debug)]
+pub struct IntOverflowError;
+
+impl TryFrom<i128> for Integer {
+    type Error = IntOverflowError;
+
+    fn try_from(value: i128) -> Result<Self, Self::Error> {
+        if value > u64::MAX as i128 {
+            Err(IntOverflowError)
+        } else if value > 0 {
+            Ok(Integer::from(value as u64))
+        } else if value > i64::MIN as i128 {
+            Ok(Integer::from(value as i64))
+        } else if value < -18446744073709551616 {
+            // won't fit in 64 bits after offset from -1
+            Err(IntOverflowError)
+        } else {
+            // transform to offset from -1
+            let nvalue = -1 - value;
+            // Value is negative, and is outside the range
+            // that i64 can store. So we know that the
+            // canonical representation needs 8 bytes.
+            Ok(Integer::N64(nvalue as u64))
         }
     }
 }
@@ -148,6 +262,7 @@ mod test {
 
     #[test]
     fn uint() {
+        // examples from RFC 7049
         assert_eq!(CborType::from(0u8).encode(), hex!("00"));
         assert_eq!(CborType::from(1u8).encode(), hex!("01"));
         assert_eq!(CborType::from(10u8).encode(), hex!("0a"));
@@ -155,7 +270,43 @@ mod test {
         assert_eq!(CborType::from(24u8).encode(), hex!("1818"));
         assert_eq!(CborType::from(25u8).encode(), hex!("1819"));
         assert_eq!(CborType::from(100u8).encode(), hex!("1864"));
-        assert_eq!(CborType::from(100u16).encode(), hex!("1864"));
         assert_eq!(CborType::from(1000u16).encode(), hex!("1903e8"));
+        assert_eq!(CborType::from(1000000u32).encode(), hex!("1a000f4240"));
+        assert_eq!(
+            CborType::from(1000000000000u64).encode(),
+            hex!("1b000000e8d4a51000")
+        );
+        assert_eq!(
+            CborType::from(18446744073709551615u64).encode(),
+            hex!("1bffffffffffffffff")
+        );
+
+        // when using `From`, integers are canonicalized.
+        assert_eq!(CborType::from(100u16).encode(), hex!("1864"));
+        assert_eq!(CborType::from(100u32).encode(), hex!("1864"));
+        assert_eq!(CborType::from(100u64).encode(), hex!("1864"));
+
+        // We can make non-canonical integers by hand.
+        let i = Integer::U32(100);
+        assert_eq!(CborType::from(i).encode(), hex!("1a00000064"));
+    }
+
+    #[test]
+    fn nint() {
+        // examples from RFC 7049
+        assert_eq!(CborType::from(0_i8).encode(), hex!("00"));
+        assert_eq!(CborType::from(-1_i8).encode(), hex!("20"));
+        assert_eq!(CborType::from(-10_i8).encode(), hex!("29"));
+        assert_eq!(CborType::from(-100_i8).encode(), hex!("3863"));
+        assert_eq!(CborType::from(-1000_i16).encode(), hex!("3903e7"));
+
+        // conversions from i128 are fallible, because we only allow
+        // values that are representable in CBOR integer types.
+        let val = Integer::try_from(-18446744073709551616_i128).unwrap();
+        assert_eq!(CborType::from(val).encode(), hex!("3bffffffffffffffff"));
+
+        // Too big for Integer
+        Integer::try_from((u64::MAX as i128) + 1).unwrap_err();
+        Integer::try_from(-2 - (u64::MAX as i128)).unwrap_err();
     }
 }

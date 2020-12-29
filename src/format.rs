@@ -121,16 +121,32 @@ fn encode_integer(x: &Integer) -> Vec<Element> {
             Element::new(Major::Uint, AdnInfo::MORE2, buf)
         }
         Integer::U32(n) => {
-            let mut buf = [0u8; 2];
+            let mut buf = [0u8; 4];
             NetworkEndian::write_u32(&mut buf, n);
             Element::new(Major::Uint, AdnInfo::MORE4, buf)
         }
         Integer::U64(n) => {
-            let mut buf = [0u8; 2];
+            let mut buf = [0u8; 8];
             NetworkEndian::write_u64(&mut buf, n);
             Element::new(Major::Uint, AdnInfo::MORE8, buf)
         }
-        _ => todo!(),
+        Integer::N8(n) if n < 24 => Element::new(Major::Nint, AdnInfo(n), Nada),
+        Integer::N8(n) => Element::new(Major::Nint, AdnInfo::MORE1, vec![n]),
+        Integer::N16(n) => {
+            let mut buf = [0u8; 2];
+            NetworkEndian::write_u16(&mut buf, n);
+            Element::new(Major::Nint, AdnInfo::MORE2, buf)
+        }
+        Integer::N32(n) => {
+            let mut buf = [0u8; 4];
+            NetworkEndian::write_u32(&mut buf, n);
+            Element::new(Major::Nint, AdnInfo::MORE4, buf)
+        }
+        Integer::N64(n) => {
+            let mut buf = [0u8; 8];
+            NetworkEndian::write_u64(&mut buf, n);
+            Element::new(Major::Nint, AdnInfo::MORE8, buf)
+        }
     };
     vec![element]
 }
