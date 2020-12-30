@@ -1,4 +1,6 @@
-use crate::{CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Integer};
+use crate::{
+    ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Integer, TextString,
+};
 use byteorder::{ByteOrder, NetworkEndian};
 
 #[repr(u8)]
@@ -100,13 +102,48 @@ impl EncodeSymbolic for CborType {
                 vec![element]
             }
             CborType::Integer(x) => encode_integer(x),
-            CborType::ByteString(_) => todo!(),
-            CborType::TextString(_) => todo!(),
+            CborType::ByteString(x) => encode_bytestring(x),
+            CborType::TextString(x) => encode_textstring(x),
             CborType::Array(_) => todo!(),
             CborType::Map(_) => todo!(),
             CborType::Tagged(_) => todo!(),
             CborType::Float(_) => todo!(),
         }
+    }
+}
+
+trait ToNetworkEndian {
+    type OutBuf;
+    fn to_ne(&self) -> Self::OutBuf;
+}
+
+impl ToNetworkEndian for u16 {
+    type OutBuf = [u8; 2];
+
+    fn to_ne(&self) -> Self::OutBuf {
+        let mut buf = Self::OutBuf::default();
+        NetworkEndian::write_u16(&mut buf, *self);
+        buf
+    }
+}
+
+impl ToNetworkEndian for u32 {
+    type OutBuf = [u8; 4];
+
+    fn to_ne(&self) -> Self::OutBuf {
+        let mut buf = Self::OutBuf::default();
+        NetworkEndian::write_u32(&mut buf, *self);
+        buf
+    }
+}
+
+impl ToNetworkEndian for u64 {
+    type OutBuf = [u8; 8];
+
+    fn to_ne(&self) -> Self::OutBuf {
+        let mut buf = Self::OutBuf::default();
+        NetworkEndian::write_u64(&mut buf, *self);
+        buf
     }
 }
 
@@ -118,40 +155,67 @@ fn encode_integer(x: &Integer) -> Vec<Element> {
     let element = match *x {
         Integer::U5(n) => Element::new(Major::Uint, AdnInfo(*n), Nada),
         Integer::U8(n) => Element::new(Major::Uint, AdnInfo::MORE1, vec![n]),
-        Integer::U16(n) => {
-            let mut buf = [0u8; 2];
-            NetworkEndian::write_u16(&mut buf, n);
-            Element::new(Major::Uint, AdnInfo::MORE2, buf)
-        }
-        Integer::U32(n) => {
-            let mut buf = [0u8; 4];
-            NetworkEndian::write_u32(&mut buf, n);
-            Element::new(Major::Uint, AdnInfo::MORE4, buf)
-        }
-        Integer::U64(n) => {
-            let mut buf = [0u8; 8];
-            NetworkEndian::write_u64(&mut buf, n);
-            Element::new(Major::Uint, AdnInfo::MORE8, buf)
-        }
+        Integer::U16(n) => Element::new(Major::Uint, AdnInfo::MORE2, n.to_ne()),
+        Integer::U32(n) => Element::new(Major::Uint, AdnInfo::MORE4, n.to_ne()),
+        Integer::U64(n) => Element::new(Major::Uint, AdnInfo::MORE8, n.to_ne()),
         Integer::N5(n) => Element::new(Major::Nint, AdnInfo(*n), Nada),
         Integer::N8(n) => Element::new(Major::Nint, AdnInfo::MORE1, vec![n]),
-        Integer::N16(n) => {
-            let mut buf = [0u8; 2];
-            NetworkEndian::write_u16(&mut buf, n);
-            Element::new(Major::Nint, AdnInfo::MORE2, buf)
-        }
-        Integer::N32(n) => {
-            let mut buf = [0u8; 4];
-            NetworkEndian::write_u32(&mut buf, n);
-            Element::new(Major::Nint, AdnInfo::MORE4, buf)
-        }
-        Integer::N64(n) => {
-            let mut buf = [0u8; 8];
-            NetworkEndian::write_u64(&mut buf, n);
-            Element::new(Major::Nint, AdnInfo::MORE8, buf)
-        }
+        Integer::N16(n) => Element::new(Major::Nint, AdnInfo::MORE2, n.to_ne()),
+        Integer::N32(n) => Element::new(Major::Nint, AdnInfo::MORE4, n.to_ne()),
+        Integer::N64(n) => Element::new(Major::Nint, AdnInfo::MORE8, n.to_ne()),
     };
     vec![element]
+}
+
+// Helper function for length values
+fn encode_bytes(major: Major, v: &[u8]) -> Element {
+    let len = v.len();
+    if len < 24 {
+        Element::new(major, AdnInfo(len as u8), Vec::from(v))
+    } else if len < 0x100 {
+        // 1 byte needed to express length.
+        let mut buf = Vec::with_capacity(len + 1);
+        buf.push(len as u8);
+        Element::new(major, AdnInfo::MORE1, buf)
+    } else if len < 0x10000 {
+        // 2 bytes needed to express length.
+        let mut buf = Vec::with_capacity(len + 2);
+        buf.extend(&(len as u16).to_ne());
+        Element::new(major, AdnInfo::MORE2, buf)
+    } else if len < 0x100000000 {
+        // 4 bytes needed to express length.
+        let mut buf = Vec::with_capacity(len + 4);
+        buf.extend(&(len as u32).to_ne());
+        Element::new(major, AdnInfo::MORE4, buf)
+    } else {
+        // 8 bytes needed to express length.
+        let mut buf = Vec::with_capacity(len + 8);
+        buf.extend(&(len as u64).to_ne());
+        Element::new(major, AdnInfo::MORE8, buf)
+    }
+}
+
+/// Encode a byte string.
+fn encode_bytestring(x: &ByteString) -> Vec<Element> {
+    match x {
+        ByteString::DefLen(bytes) => {
+            let element = encode_bytes(Major::Bstr, bytes);
+            vec![element]
+        }
+        _ => todo!(), // FIXME: IndefLen
+    }
+}
+
+/// Encode a text string.
+fn encode_textstring(x: &TextString) -> Vec<Element> {
+    match x {
+        TextString::DefLen(s) => {
+            let bytes = s.as_bytes();
+            let element = encode_bytes(Major::Tstr, bytes);
+            vec![element]
+        }
+        _ => todo!(),
+    }
 }
 
 impl Encode for Vec<Element> {

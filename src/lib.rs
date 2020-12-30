@@ -246,10 +246,30 @@ pub enum ByteString {
     IndefLen(Vec<Vec<u8>>),
 }
 
+impl<T> From<T> for ByteString
+where
+    T: Into<Vec<u8>>,
+{
+    // Create a definite-length byte string.
+    fn from(b: T) -> Self {
+        ByteString::DefLen(b.into())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TextString {
     DefLen(String),
     IndefLen(Vec<String>),
+}
+
+impl<T> From<T> for TextString
+where
+    T: Into<String>,
+{
+    // Create a definite-length string.
+    fn from(s: T) -> Self {
+        TextString::DefLen(s.into())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -291,6 +311,18 @@ where
 {
     fn from(x: T) -> Self {
         CborType::Integer(x.into())
+    }
+}
+
+impl From<&str> for CborType {
+    fn from(x: &str) -> Self {
+        CborType::TextString(x.into())
+    }
+}
+
+impl From<&[u8]> for CborType {
+    fn from(x: &[u8]) -> Self {
+        CborType::ByteString(x.into())
     }
 }
 
@@ -362,6 +394,38 @@ mod test {
         assert_eq!(CborType::Bool(true).encode(), hex!("F5"));
         assert_eq!(CborType::Null.encode(), hex!("F6"));
         assert_eq!(CborType::Undefined.encode(), hex!("F7"));
+    }
+
+    #[test]
+    fn text_strings() {
+        // examples from RFC 7049
+        assert_eq!(CborType::from("").encode(), hex!("60"));
+        assert_eq!(CborType::from("a").encode(), hex!("61 61"));
+        assert_eq!(CborType::from("IETF").encode(), hex!("64 49455446"));
+        assert_eq!(CborType::from("\"\\").encode(), hex!("62 225c"));
+        assert_eq!(CborType::from("\u{00fc}").encode(), hex!("62 c3bc"));
+        assert_eq!(CborType::from("\u{6c34}").encode(), hex!("63e6b0b4"));
+        // Rust doesn't accept this as valid UTF-8.
+        //assert_eq!(CborType::from("\u{d800}\u{dd51}").encode(), hex!("??"));
+
+        // A 256-byte string
+        let s = String::from("12345678").repeat(32);
+        assert_eq!(s.len(), 256);
+        let buf = CborType::from(&s[..]).encode();
+        assert_eq!(&buf[..3], hex!("79 0100"));
+
+        // A 16KiB string
+        let s = String::from("12345678").repeat(8192);
+        assert_eq!(s.len(), 65536);
+        let buf = CborType::from(&s[..]).encode();
+        assert_eq!(&buf[..5], hex!("7a 00 01 00 00"));
+    }
+
+    #[test]
+    fn byte_strings() {
+        // examples from RFC 7049
+        assert_eq!(CborType::from(&b""[..]).encode(), hex!("40"));
+        assert_eq!(CborType::from(&b"\x01\x02\x03\x04"[..]).encode(), hex!("4401020304"));
     }
 
     #[test]
