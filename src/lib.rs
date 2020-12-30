@@ -273,15 +273,15 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Array {
-    pub indefinite: bool,
-    pub items: Vec<CborType>,
+pub enum Array {
+    DefLen(Vec<CborType>),
+    IndefLen(Vec<Vec<CborType>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Map {
-    pub indefinite: bool,
-    pub items: Vec<CborType>,
+pub enum Map {
+    DefLen(Vec<(CborType, CborType)>),
+    IndefLen(Vec<Vec<(CborType, CborType)>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -337,6 +337,13 @@ impl From<TextString> for CborType {
         CborType::TextString(x)
     }
 }
+
+impl From<Vec<CborType>> for CborType {
+    fn from(x: Vec<CborType>) -> CborType {
+        CborType::Array(Array::DefLen(x))
+    }
+}
+
 
 pub trait Canonical {
     fn is_canonical(&self) -> bool;
@@ -577,5 +584,11 @@ mod test {
 
         let s = format!("{:?}", Integer::try_from(-(u64::MAX as i128)).unwrap());
         assert_eq!(s, "Integer { N64: -18446744073709551615 }");
+    }
+
+    #[test]
+    fn arrays() {
+        let list = Vec::<CborType>::new();
+        assert_eq!(CborType::from(list).encode(), hex!("9f ff"));
     }
 }
