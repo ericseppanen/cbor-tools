@@ -410,18 +410,23 @@ mod test {
         assert_eq!(CborType::from("\u{00fc}").encode(), hex!("62 c3bc"));
         assert_eq!(CborType::from("\u{6c34}").encode(), hex!("63e6b0b4"));
         // Rust doesn't accept this as valid UTF-8.
-        //assert_eq!(CborType::from("\u{d800}\u{dd51}").encode(), hex!("??"));
+        //assert_eq!(CborType::from("\u{d800}\u{dd51}").encode(), hex!("64f0908591"));
 
         // A 256-byte string
         let s = String::from("12345678").repeat(32);
         assert_eq!(s.len(), 256);
         let buf = CborType::from(&s[..]).encode();
         assert_eq!(&buf[..3], hex!("79 0100"));
+        assert_eq!(buf.len(), 259);
+        for chunk in buf[3..].chunks(8) {
+            assert_eq!(chunk, "12345678".as_bytes());
+        }
 
         // A 16KiB string
         let s = String::from("12345678").repeat(8192);
         assert_eq!(s.len(), 65536);
         let buf = CborType::from(&s[..]).encode();
+        assert_eq!(buf.len(), 65541);
         assert_eq!(&buf[..5], hex!("7a 00 01 00 00"));
 
         // indefinite length from RFC 7049: (_ "strea", "ming")
@@ -439,6 +444,16 @@ mod test {
             CborType::from(&b"\x01\x02\x03\x04"[..]).encode(),
             hex!("4401020304")
         );
+
+        // A 256-byte array
+        let v: Vec<u8> = (1..9).into_iter().collect::<Vec<u8>>().repeat(32);
+        assert_eq!(v.len(), 256);
+        let buf = CborType::from(&v[..]).encode();
+        assert_eq!(&buf[..3], hex!("59 0100"));
+        assert_eq!(buf.len(), 259);
+        for chunk in buf[3..].chunks(8) {
+            assert_eq!(chunk, b"\x01\x02\x03\x04\x05\x06\x07\x08");
+        }
 
         // indefinite length from RFC 7049: (_ h'0102', h'030405')
         let list = vec![vec![1u8, 2], vec![3u8, 4, 5]];

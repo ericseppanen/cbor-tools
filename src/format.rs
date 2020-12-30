@@ -189,21 +189,25 @@ fn encode_bytes(major: Major, v: &[u8]) -> Element {
         // 1 byte needed to express length.
         let mut buf = Vec::with_capacity(len + 1);
         buf.push(len as u8);
+        buf.extend(v);
         Element::new(major, AdnInfo::MORE1, buf)
     } else if len < 0x10000 {
         // 2 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 2);
         buf.extend(&(len as u16).to_ne());
+        buf.extend(v);
         Element::new(major, AdnInfo::MORE2, buf)
     } else if len < 0x100000000 {
         // 4 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 4);
         buf.extend(&(len as u32).to_ne());
+        buf.extend(v);
         Element::new(major, AdnInfo::MORE4, buf)
     } else {
         // 8 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 8);
         buf.extend(&(len as u64).to_ne());
+        buf.extend(v);
         Element::new(major, AdnInfo::MORE8, buf)
     }
 }
