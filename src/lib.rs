@@ -419,13 +419,33 @@ mod test {
         assert_eq!(s.len(), 65536);
         let buf = CborType::from(&s[..]).encode();
         assert_eq!(&buf[..5], hex!("7a 00 01 00 00"));
+
+        // indefinite length from RFC 7049: (_ "strea", "ming")
+        let list = vec![String::from("strea"), String::from("ming")];
+        let data = CborType::TextString(TextString::IndefLen(list));
+        assert_eq!(data.encode(), hex!("7f 65 7374726561 64 6d696e67 ff"));
     }
 
     #[test]
     fn byte_strings() {
         // examples from RFC 7049
         assert_eq!(CborType::from(&b""[..]).encode(), hex!("40"));
-        assert_eq!(CborType::from(&b"\x01\x02\x03\x04"[..]).encode(), hex!("4401020304"));
+        assert_eq!(
+            CborType::from(&b"\x01\x02\x03\x04"[..]).encode(),
+            hex!("4401020304")
+        );
+
+        // indefinite length from RFC 7049: (_ h'0102', h'030405')
+        let list = vec![vec![1u8, 2], vec![3u8, 4, 5]];
+        let data = CborType::ByteString(ByteString::IndefLen(list));
+        assert_eq!(data.encode(), hex!("5f 42 0102 43 030405 ff"));
+
+        // indefinite example from RFC 7049 2.2.2
+        let str1 = Vec::from(&b"\xaa\xbb\xcc\xdd"[..]);
+        let str2 = Vec::from(&b"\xee\xff\x99"[..]);
+        let list = vec![str1, str2];
+        let data = CborType::ByteString(ByteString::IndefLen(list));
+        assert_eq!(data.encode(), hex!("5f 44 aabbccdd 43 eeff99 ff"));
     }
 
     #[test]

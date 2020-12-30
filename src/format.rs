@@ -27,6 +27,9 @@ impl AdnInfo {
     pub const MORE4: AdnInfo = AdnInfo(26);
     pub const MORE8: AdnInfo = AdnInfo(27);
 
+    // Indefinite-length byte- or text- strings begin with this
+    pub const INDEFINITE: AdnInfo = AdnInfo(31);
+
     // In major type 7, a number of values are used for special purposes.
     pub const FALSE: AdnInfo = AdnInfo(20);
     pub const TRUE: AdnInfo = AdnInfo(21);
@@ -202,7 +205,15 @@ fn encode_bytestring(x: &ByteString) -> Vec<Element> {
             let element = encode_bytes(Major::Bstr, bytes);
             vec![element]
         }
-        _ => todo!(), // FIXME: IndefLen
+        ByteString::IndefLen(list) => {
+            let mut elements = Vec::with_capacity(1 + list.len());
+            elements.push(Element::new(Major::Bstr, AdnInfo::INDEFINITE, Nada));
+            for bytes in list {
+                elements.push(encode_bytes(Major::Bstr, bytes));
+            }
+            elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
+            elements
+        }
     }
 }
 
@@ -214,7 +225,16 @@ fn encode_textstring(x: &TextString) -> Vec<Element> {
             let element = encode_bytes(Major::Tstr, bytes);
             vec![element]
         }
-        _ => todo!(),
+        TextString::IndefLen(list) => {
+            let mut elements = Vec::with_capacity(1 + list.len());
+            elements.push(Element::new(Major::Tstr, AdnInfo::INDEFINITE, Nada));
+            for text in list {
+                let bytes = text.as_bytes();
+                elements.push(encode_bytes(Major::Tstr, bytes));
+            }
+            elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
+            elements
+        }
     }
 }
 
