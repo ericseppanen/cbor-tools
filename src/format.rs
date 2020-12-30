@@ -1,5 +1,6 @@
 use crate::{
-    ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Integer, TextString,
+    ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite, Integer,
+    TextString,
 };
 use byteorder::{ByteOrder, NetworkEndian};
 
@@ -109,9 +110,18 @@ impl EncodeSymbolic for CborType {
             CborType::TextString(x) => encode_textstring(x),
             CborType::Array(_) => todo!(),
             CborType::Map(_) => todo!(),
+            CborType::Indefinite(x) => encode_indefinite(x),
             CborType::Tagged(_) => todo!(),
             CborType::Float(_) => todo!(),
         }
+    }
+}
+
+fn encode_indefinite(ind: &Indefinite) -> Vec<Element> {
+    match ind {
+        Indefinite::ByteString(x) => encode_indef_bytestring(x),
+        Indefinite::TextString(x) => encode_indef_textstring(x),
+        _ => todo!(),
     }
 }
 
@@ -199,43 +209,37 @@ fn encode_bytes(major: Major, v: &[u8]) -> Element {
 }
 
 /// Encode a byte string.
-fn encode_bytestring(x: &ByteString) -> Vec<Element> {
-    match x {
-        ByteString::DefLen(bytes) => {
-            let element = encode_bytes(Major::Bstr, bytes);
-            vec![element]
-        }
-        ByteString::IndefLen(list) => {
-            let mut elements = Vec::with_capacity(1 + list.len());
-            elements.push(Element::new(Major::Bstr, AdnInfo::INDEFINITE, Nada));
-            for bytes in list {
-                elements.push(encode_bytes(Major::Bstr, bytes));
-            }
-            elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
-            elements
-        }
+fn encode_bytestring(bstr: &ByteString) -> Vec<Element> {
+    let element = encode_bytes(Major::Bstr, &bstr.0);
+    vec![element]
+}
+
+fn encode_indef_bytestring(list: &Vec<ByteString>) -> Vec<Element> {
+    let mut elements = Vec::with_capacity(1 + list.len());
+    elements.push(Element::new(Major::Bstr, AdnInfo::INDEFINITE, Nada));
+    for bstr in list {
+        elements.push(encode_bytes(Major::Bstr, &bstr.0));
     }
+    elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
+    elements
 }
 
 /// Encode a text string.
-fn encode_textstring(x: &TextString) -> Vec<Element> {
-    match x {
-        TextString::DefLen(s) => {
-            let bytes = s.as_bytes();
-            let element = encode_bytes(Major::Tstr, bytes);
-            vec![element]
-        }
-        TextString::IndefLen(list) => {
-            let mut elements = Vec::with_capacity(1 + list.len());
-            elements.push(Element::new(Major::Tstr, AdnInfo::INDEFINITE, Nada));
-            for text in list {
-                let bytes = text.as_bytes();
-                elements.push(encode_bytes(Major::Tstr, bytes));
-            }
-            elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
-            elements
-        }
+fn encode_textstring(text: &TextString) -> Vec<Element> {
+    let bytes = text.0.as_bytes();
+    let element = encode_bytes(Major::Tstr, bytes);
+    vec![element]
+}
+
+fn encode_indef_textstring(list: &Vec<TextString>) -> Vec<Element> {
+    let mut elements = Vec::with_capacity(1 + list.len());
+    elements.push(Element::new(Major::Tstr, AdnInfo::INDEFINITE, Nada));
+    for text in list {
+        let bytes = text.0.as_bytes();
+        elements.push(encode_bytes(Major::Tstr, bytes));
     }
+    elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
+    elements
 }
 
 impl Encode for Vec<Element> {
