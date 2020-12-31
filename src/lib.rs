@@ -602,9 +602,31 @@ mod test {
     }
 
     #[test]
-    #[ignore]
     fn arrays() {
-        let list = Vec::<CborType>::new();
-        assert_eq!(CborType::from(list).encode(), hex!("9f ff"));
+        fn make_array<T>(list: Vec<T>) -> CborType
+        where
+            T: Into<CborType>,
+        {
+            let v: Vec<CborType> = list.into_iter().map(|x| x.into()).collect();
+            CborType::from(v)
+        }
+
+        // examples from RFC 7049
+        let empty = Vec::<u32>::new();
+        assert_eq!(make_array(empty).encode(), hex!("80"));
+
+        let nums = vec![1, 2, 3];
+        assert_eq!(make_array(nums).encode(), hex!("83 010203"));
+
+        let deep = vec![
+            CborType::from(1),
+            make_array(vec![2, 3]),
+            make_array(vec![4, 5]),
+        ];
+        assert_eq!(make_array(deep).encode(), hex!("8301820203820405"));
+
+        let twentyfive: Vec<u32> = (1..26).into_iter().collect();
+        let expected = hex!("98190102030405060708090a0b0c0d0e0f101112131415161718181819");
+        assert_eq!(make_array(twentyfive).encode(), expected);
     }
 }

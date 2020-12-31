@@ -1,6 +1,6 @@
 use crate::{
-    ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite, Integer,
-    TextString,
+    Array, ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite,
+    Integer, TextString,
 };
 use byteorder::{ByteOrder, NetworkEndian};
 
@@ -53,9 +53,9 @@ impl From<Nada> for Vec<u8> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Element {
-    pub major: Major,
-    pub adn_info: AdnInfo,
-    pub bytes: Vec<u8>,
+    major: Major,
+    adn_info: AdnInfo,
+    bytes: Vec<u8>,
 }
 
 impl Element {
@@ -68,6 +68,10 @@ impl Element {
             adn_info,
             bytes: bytes.into(),
         }
+    }
+
+    fn add_bytes(&mut self, bytes: &[u8]) {
+        self.bytes.extend(bytes);
     }
 }
 
@@ -108,7 +112,7 @@ impl EncodeSymbolic for CborType {
             CborType::Integer(x) => encode_integer(x),
             CborType::ByteString(x) => encode_bytestring(x),
             CborType::TextString(x) => encode_textstring(x),
-            CborType::Array(_) => todo!(),
+            CborType::Array(x) => encode_array(x),
             CborType::Map(_) => todo!(),
             CborType::Indefinite(x) => encode_indefinite(x),
             CborType::Tagged(_) => todo!(),
@@ -180,34 +184,42 @@ fn encode_integer(x: &Integer) -> Vec<Element> {
     vec![element]
 }
 
-// Helper function for length values
+// Encode a text- or byte-string into an Element.
 fn encode_bytes(major: Major, v: &[u8]) -> Element {
     let len = v.len();
+    let mut element = encode_length(major, len);
+    element.add_bytes(v);
+    element
+}
+
+// Helper function for length values
+//
+// It returns an Element with no payload.
+// This is incomplete for definite-length byte/text-strings,
+// which need to have the string bytes appended.
+// It is correct for arrays or maps.
+fn encode_length(major: Major, len: usize) -> Element {
     if len < 24 {
-        Element::new(major, AdnInfo(len as u8), Vec::from(v))
+        Element::new(major, AdnInfo(len as u8), Nada)
     } else if len < 0x100 {
         // 1 byte needed to express length.
         let mut buf = Vec::with_capacity(len + 1);
         buf.push(len as u8);
-        buf.extend(v);
         Element::new(major, AdnInfo::MORE1, buf)
     } else if len < 0x10000 {
         // 2 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 2);
         buf.extend(&(len as u16).to_ne());
-        buf.extend(v);
         Element::new(major, AdnInfo::MORE2, buf)
     } else if len < 0x100000000 {
         // 4 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 4);
         buf.extend(&(len as u32).to_ne());
-        buf.extend(v);
         Element::new(major, AdnInfo::MORE4, buf)
     } else {
         // 8 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 8);
         buf.extend(&(len as u64).to_ne());
-        buf.extend(v);
         Element::new(major, AdnInfo::MORE8, buf)
     }
 }
@@ -243,6 +255,16 @@ fn encode_indef_textstring(list: &Vec<TextString>) -> Vec<Element> {
         elements.push(encode_bytes(Major::Tstr, bytes));
     }
     elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
+    elements
+}
+
+fn encode_array(a: &Array) -> Vec<Element> {
+    let list = &a.0;
+    let mut elements = Vec::with_capacity(1 + list.len());
+    elements.push(encode_length(Major::Array, list.len()));
+    for item in list {
+        elements.extend(item.encode_symbolic());
+    }
     elements
 }
 
