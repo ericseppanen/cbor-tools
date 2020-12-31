@@ -342,6 +342,12 @@ impl From<Vec<CborType>> for CborType {
     }
 }
 
+impl From<Vec<(CborType, CborType)>> for CborType {
+    fn from(x: Vec<(CborType, CborType)>) -> CborType {
+        CborType::Map(Map(x))
+    }
+}
+
 pub trait Canonical {
     fn is_canonical(&self) -> bool;
     fn to_canonical(&self) -> Self; // or Cow<Self> ?
@@ -601,16 +607,18 @@ mod test {
         assert_eq!(s, "Integer { N64: -18446744073709551615 }");
     }
 
+    // This is very limited in usefulness, because it only allows
+    // heterogenous arrays (all composed of the same type).
+    fn make_array<T>(list: Vec<T>) -> CborType
+    where
+        T: Into<CborType>,
+    {
+        let v: Vec<CborType> = list.into_iter().map(|x| x.into()).collect();
+        CborType::from(v)
+    }
+
     #[test]
     fn arrays() {
-        fn make_array<T>(list: Vec<T>) -> CborType
-        where
-            T: Into<CborType>,
-        {
-            let v: Vec<CborType> = list.into_iter().map(|x| x.into()).collect();
-            CborType::from(v)
-        }
-
         // examples from RFC 7049
         let empty = Vec::<u32>::new();
         assert_eq!(make_array(empty).encode(), hex!("80"));
@@ -628,5 +636,39 @@ mod test {
         let twentyfive: Vec<u32> = (1..26).into_iter().collect();
         let expected = hex!("98190102030405060708090a0b0c0d0e0f101112131415161718181819");
         assert_eq!(make_array(twentyfive).encode(), expected);
+    }
+
+    // This is very limited in usefulness, because it only allows
+    // heterogenous maps (all keys and values composed of the same type).
+    fn make_map<K, V>(list: Vec<(K, V)>) -> CborType
+    where
+        K: Into<CborType>,
+        V: Into<CborType>,
+    {
+        let v: Vec<(CborType, CborType)> = list
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect();
+        CborType::from(v)
+    }
+
+    #[test]
+    fn maps() {
+        // examples from RFC 7049
+        let empty = Vec::<(i8, i8)>::new();
+        assert_eq!(make_map(empty).encode(), hex!("a0"));
+
+        let kv = vec![(1, 2), (3, 4)];
+        assert_eq!(make_map(kv).encode(), hex!("a2 0102 0304"));
+
+        let kv = vec![
+            (CborType::from("a"), CborType::from(1)),
+            (CborType::from("b"), make_array(vec![2, 3])),
+        ];
+        assert_eq!(make_map(kv).encode(), hex!("a2 6161 01 6162 820203"));
+
+        let kv = vec![("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")];
+        let expected = hex!("a56161614161626142616361436164614461656145");
+        assert_eq!(make_map(kv).encode(), expected);
     }
 }

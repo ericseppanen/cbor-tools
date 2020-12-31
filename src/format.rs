@@ -1,6 +1,6 @@
 use crate::{
     Array, ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite,
-    Integer, TextString,
+    Integer, Map, TextString,
 };
 use byteorder::{ByteOrder, NetworkEndian};
 
@@ -113,7 +113,7 @@ impl EncodeSymbolic for CborType {
             CborType::ByteString(x) => encode_bytestring(x),
             CborType::TextString(x) => encode_textstring(x),
             CborType::Array(x) => encode_array(x),
-            CborType::Map(_) => todo!(),
+            CborType::Map(m) => encode_map(m),
             CborType::Indefinite(x) => encode_indefinite(x),
             CborType::Tagged(_) => todo!(),
             CborType::Float(_) => todo!(),
@@ -264,6 +264,17 @@ fn encode_array(a: &Array) -> Vec<Element> {
     elements.push(encode_length(Major::Array, list.len()));
     for item in list {
         elements.extend(item.encode_symbolic());
+    }
+    elements
+}
+
+fn encode_map(map: &Map) -> Vec<Element> {
+    let kv_list = &map.0;
+    let mut elements = Vec::with_capacity(1 + kv_list.len());
+    elements.push(encode_length(Major::Map, kv_list.len()));
+    for (k, v) in kv_list {
+        elements.extend(k.encode_symbolic());
+        elements.extend(v.encode_symbolic());
     }
     elements
 }
