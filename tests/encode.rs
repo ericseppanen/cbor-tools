@@ -214,67 +214,131 @@ fn int_debug() {
 
 // This is very limited in usefulness, because it only allows
 // heterogenous arrays (all composed of the same type).
-fn make_array<T>(list: Vec<T>) -> CborType
+fn make_array<T>(list: &Vec<T>) -> CborType
 where
-    T: Into<CborType>,
+    T: Clone + Into<CborType>,
 {
-    let v: Vec<CborType> = list.into_iter().map(|x| x.into()).collect();
+    let v: Vec<CborType> = list.into_iter().cloned().map(|x| x.into()).collect();
     CborType::from(v)
+}
+
+fn make_indef_array<T>(list: &Vec<T>) -> CborType
+where
+    T: Clone + Into<CborType>,
+{
+    // build a regular array struct and then cannibalize it.
+    let regular_array = make_array(list);
+    if let CborType::Array(a) = regular_array {
+        CborType::Indefinite(Indefinite::Array(a))
+    } else {
+        unreachable!()
+    }
 }
 
 #[test]
 fn arrays() {
     // examples from RFC 7049
     let empty = Vec::<u32>::new();
-    assert_eq!(make_array(empty).encode(), hex!("80"));
+    assert_eq!(make_array(&empty).encode(), hex!("80"));
 
     let nums = vec![1, 2, 3];
-    assert_eq!(make_array(nums).encode(), hex!("83 010203"));
+    assert_eq!(make_array(&nums).encode(), hex!("83 010203"));
 
     let deep = vec![
         CborType::from(1),
-        make_array(vec![2, 3]),
-        make_array(vec![4, 5]),
+        make_array(&vec![2, 3]),
+        make_array(&vec![4, 5]),
     ];
-    assert_eq!(make_array(deep).encode(), hex!("8301820203820405"));
+    assert_eq!(make_array(&deep).encode(), hex!("8301820203820405"));
 
     let twentyfive: Vec<u32> = (1..26).into_iter().collect();
     let expected = hex!("98190102030405060708090a0b0c0d0e0f101112131415161718181819");
-    assert_eq!(make_array(twentyfive).encode(), expected);
+    assert_eq!(make_array(&twentyfive).encode(), expected);
+
+    assert_eq!(make_indef_array(&empty).encode(), hex!("9fff"));
+    assert_eq!(make_indef_array(&deep).encode(), hex!("9f01820203820405ff"));
+
+    let deep2 = vec![
+        CborType::from(1),
+        make_array(&vec![2, 3]),
+        make_indef_array(&vec![4, 5]),
+    ];
+    assert_eq!(
+        make_indef_array(&deep2).encode(),
+        hex!("9f018202039f0405ffff")
+    );
+
+    let deep3 = vec![
+        CborType::from(1),
+        make_array(&vec![2, 3]),
+        make_indef_array(&vec![4, 5]),
+    ];
+    assert_eq!(make_array(&deep3).encode(), hex!("83018202039f0405ff"));
+
+    let deep4 = vec![
+        CborType::from(1),
+        make_indef_array(&vec![2, 3]),
+        make_array(&vec![4, 5]),
+    ];
+    assert_eq!(make_array(&deep4).encode(), hex!("83019f0203ff820405"));
+
+    let expected = hex!("9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
+    assert_eq!(make_indef_array(&twentyfive).encode(), expected);
 }
 
 // This is very limited in usefulness, because it only allows
 // heterogenous maps (all keys and values composed of the same type).
-fn make_map<K, V>(list: Vec<(K, V)>) -> CborType
+fn make_map<K, V>(list: &Vec<(K, V)>) -> CborType
 where
-    K: Into<CborType>,
-    V: Into<CborType>,
+    K: Clone + Into<CborType>,
+    V: Clone + Into<CborType>,
 {
     let v: Vec<(CborType, CborType)> = list
         .into_iter()
+        .cloned()
         .map(|(k, v)| (k.into(), v.into()))
         .collect();
     CborType::from(v)
+}
+
+fn make_indef_map<K, V>(list: &Vec<(K, V)>) -> CborType
+where
+    K: Clone + Into<CborType>,
+    V: Clone + Into<CborType>,
+{
+    // build a regular map struct and then cannibalize it.
+    let regular_map = make_map(list);
+    if let CborType::Map(m) = regular_map {
+        CborType::Indefinite(Indefinite::Map(m))
+    } else {
+        unreachable!()
+    }
 }
 
 #[test]
 fn maps() {
     // examples from RFC 7049
     let empty = Vec::<(i8, i8)>::new();
-    assert_eq!(make_map(empty).encode(), hex!("a0"));
+    assert_eq!(make_map(&empty).encode(), hex!("a0"));
 
     let kv = vec![(1, 2), (3, 4)];
-    assert_eq!(make_map(kv).encode(), hex!("a2 0102 0304"));
+    assert_eq!(make_map(&kv).encode(), hex!("a2 0102 0304"));
 
     let kv = vec![
         (CborType::from("a"), CborType::from(1)),
-        (CborType::from("b"), make_array(vec![2, 3])),
+        (CborType::from("b"), make_array(&vec![2, 3])),
     ];
-    assert_eq!(make_map(kv).encode(), hex!("a2 6161 01 6162 820203"));
+    assert_eq!(make_map(&kv).encode(), hex!("a2 6161 01 6162 820203"));
 
     let kv = vec![("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")];
     let expected = hex!("a56161614161626142616361436164614461656145");
-    assert_eq!(make_map(kv).encode(), expected);
+    assert_eq!(make_map(&kv).encode(), expected);
+
+    let kv = vec![
+        (CborType::from("a"), CborType::from(1)),
+        (CborType::from("b"), make_indef_array(&vec![2, 3])),
+    ];
+    assert_eq!(make_indef_map(&kv).encode(), hex!("bf61610161629f0203ffff"));
 }
 
 #[test]

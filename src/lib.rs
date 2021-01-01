@@ -297,7 +297,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Array(Vec<CborType>);
+pub struct Array(pub Vec<CborType>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Map(Vec<(CborType, CborType)>);

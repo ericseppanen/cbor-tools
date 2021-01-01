@@ -51,6 +51,13 @@ impl From<Nada> for Vec<u8> {
     }
 }
 
+// Used as a function argument to specify definite-length or
+// indefinite-length encoding.
+#[derive(PartialEq)]
+struct UseDefLen(bool);
+const AS_DEF: UseDefLen = UseDefLen(true);
+const AS_INDEF: UseDefLen = UseDefLen(false);
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Element {
     major: Major,
@@ -112,8 +119,8 @@ impl EncodeSymbolic for CborType {
             CborType::Integer(x) => encode_integer(x),
             CborType::ByteString(x) => encode_bytestring(x),
             CborType::TextString(x) => encode_textstring(x),
-            CborType::Array(x) => encode_array(x),
-            CborType::Map(m) => encode_map(m),
+            CborType::Array(x) => encode_array(x, AS_DEF),
+            CborType::Map(m) => encode_map(m, AS_DEF),
             CborType::Indefinite(x) => encode_indefinite(x),
             CborType::Tagged(x) => encode_tagged(x),
             CborType::Float(x) => encode_float(x),
@@ -125,7 +132,8 @@ fn encode_indefinite(ind: &Indefinite) -> Vec<Element> {
     match ind {
         Indefinite::ByteString(x) => encode_indef_bytestring(x),
         Indefinite::TextString(x) => encode_indef_textstring(x),
-        _ => todo!(),
+        Indefinite::Array(x) => encode_array(x, AS_INDEF),
+        Indefinite::Map(x) => encode_map(x, AS_INDEF),
     }
 }
 
@@ -231,23 +239,37 @@ fn encode_indef_textstring(list: &Vec<TextString>) -> Vec<Element> {
     elements
 }
 
-fn encode_array(a: &Array) -> Vec<Element> {
+fn encode_array(a: &Array, definite: UseDefLen) -> Vec<Element> {
     let list = &a.0;
     let mut elements = Vec::with_capacity(1 + list.len());
-    elements.push(encode_length(Major::Array, list.len()));
+    if definite == AS_INDEF {
+        elements.push(Element::new(Major::Array, AdnInfo::INDEFINITE, Nada));
+    } else {
+        elements.push(encode_length(Major::Array, list.len()));
+    }
     for item in list {
         elements.extend(item.encode_symbolic());
+    }
+    if definite == AS_INDEF {
+        elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
     }
     elements
 }
 
-fn encode_map(map: &Map) -> Vec<Element> {
+fn encode_map(map: &Map, definite: UseDefLen) -> Vec<Element> {
     let kv_list = &map.0;
     let mut elements = Vec::with_capacity(1 + kv_list.len());
-    elements.push(encode_length(Major::Map, kv_list.len()));
+    if definite == AS_INDEF {
+        elements.push(Element::new(Major::Map, AdnInfo::INDEFINITE, Nada));
+    } else {
+        elements.push(encode_length(Major::Map, kv_list.len()));
+    }
     for (k, v) in kv_list {
         elements.extend(k.encode_symbolic());
         elements.extend(v.encode_symbolic());
+    }
+    if definite == AS_INDEF {
+        elements.push(Element::new(Major::Misc, AdnInfo::BREAK, Nada));
     }
     elements
 }
