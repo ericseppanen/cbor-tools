@@ -413,6 +413,5 @@ fn tags() {
     // RFC 7049 2.4 (roughly)
     let bytestring = CborType::from(&[0u8; 12][..]);
     let tagged = CborType::Tagged(Tag::POS_BIGNUM.wrap(bytestring));
-    eprintln!("{:x?}", tagged.encode());
     assert_eq!(tagged.encode(), hex!("c2 4c 000000000000000000000000"));
 }
