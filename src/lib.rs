@@ -240,6 +240,36 @@ impl TryFrom<i128> for Integer {
     }
 }
 
+impl From<f16> for Float {
+    fn from(x: f16) -> Self {
+        Float::F16(x)
+    }
+}
+
+impl From<f32> for Float {
+    fn from(x: f32) -> Self {
+        let x16 = f16::from_f32(x);
+        let x32 = f32::from(x16);
+        if x32 == x {
+            Float::from(x16)
+        } else {
+            Float::F32(x)
+        }
+    }
+}
+
+impl From<f64> for Float {
+    fn from(x: f64) -> Self {
+        let x32 = x as f32;
+        let x64 = x32 as f64;
+        if x64 == x {
+            Float::from(x32)
+        } else {
+            Float::F64(x)
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ByteString(Vec<u8>);
 
@@ -309,6 +339,24 @@ where
 {
     fn from(x: T) -> Self {
         CborType::Integer(x.into())
+    }
+}
+
+impl From<f16> for CborType {
+    fn from(x: f16) -> Self {
+        CborType::Float(x.into())
+    }
+}
+
+impl From<f32> for CborType {
+    fn from(x: f32) -> Self {
+        CborType::Float(x.into())
+    }
+}
+
+impl From<f64> for CborType {
+    fn from(x: f64) -> Self {
+        CborType::Float(x.into())
     }
 }
 

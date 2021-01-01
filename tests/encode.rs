@@ -1,7 +1,7 @@
-use std::convert::TryFrom;
-
-use cbor_tools::{ByteString, CborType, Encode, Indefinite, Integer, TextString};
+use cbor_tools::{ByteString, CborType, Encode, Float, Indefinite, Integer, TextString};
+use half::f16;
 use hex_literal::hex;
+use std::convert::TryFrom;
 
 #[test]
 fn special_types() {
@@ -275,4 +275,48 @@ fn maps() {
     let kv = vec![("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")];
     let expected = hex!("a56161614161626142616361436164614461656145");
     assert_eq!(make_map(kv).encode(), expected);
+}
+
+#[test]
+fn floats() {
+    // examples from RFC 7049
+    assert_eq!(CborType::from(0.0).encode(), hex!("f9 0000"));
+    assert_eq!(CborType::from(-0.0).encode(), hex!("f9 8000"));
+    assert_eq!(CborType::from(1.0).encode(), hex!("f9 3c00"));
+    assert_eq!(CborType::from(1.1f64).encode(), hex!("fb3ff199999999999a"));
+    assert_eq!(CborType::from(1.5).encode(), hex!("f93e00"));
+    assert_eq!(CborType::from(65504.0).encode(), hex!("f97bff"));
+    assert_eq!(CborType::from(100000.0).encode(), hex!("fa47c35000"));
+    assert_eq!(
+        CborType::from(3.4028234663852886e+38).encode(),
+        hex!("fa7f7fffff")
+    );
+    assert_eq!(
+        CborType::from(1.0e+300).encode(),
+        hex!("fb7e37e43c8800759c")
+    );
+    assert_eq!(
+        CborType::from(5.960464477539063e-8).encode(),
+        hex!("f90001")
+    );
+    assert_eq!(CborType::from(0.00006103515625).encode(), hex!("f90400"));
+    assert_eq!(CborType::from(-4.0).encode(), hex!("f9c400"));
+    assert_eq!(CborType::from(-4.1).encode(), hex!("fbc010666666666666"));
+    assert_eq!(CborType::from(f16::INFINITY).encode(), hex!("f97c00"));
+    assert_eq!(CborType::from(f16::NAN).encode(), hex!("f97e00"));
+    assert_eq!(CborType::from(f16::NEG_INFINITY).encode(), hex!("f9fc00"));
+
+    // RFC 7049 suggests that the 16-bit representation of infinity/NaN is the canonical
+    // one, but then has example outputs for all three sizes.
+    assert_eq!(CborType::Float(Float::F32(f32::INFINITY)).encode(), hex!("fa7f800000"));
+    assert_eq!(CborType::Float(Float::F32(f32::NAN)).encode(), hex!("fa7fc00000"));
+    assert_eq!(CborType::Float(Float::F32(f32::NEG_INFINITY)).encode(), hex!("faff800000"));
+    assert_eq!(CborType::Float(Float::F64(f64::INFINITY)).encode(), hex!("fb7ff0000000000000"));
+    assert_eq!(CborType::Float(Float::F64(f64::NAN)).encode(), hex!("fb7ff8000000000000"));
+    assert_eq!(CborType::Float(Float::F64(f64::NEG_INFINITY)).encode(), hex!("fbfff0000000000000"));
+
+    // We can deliberately encode non-canonical values.
+    assert_eq!(CborType::Float(Float::F32(1.5)).encode(), hex!("fa3fc00000"));
+    assert_eq!(CborType::Float(Float::F64(1.5)).encode(), hex!("fb3ff8000000000000"));
+
 }

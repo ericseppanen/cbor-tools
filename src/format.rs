@@ -1,5 +1,5 @@
 use crate::{
-    Array, ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite,
+    Array, ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Float, Indefinite,
     Integer, Map, TextString,
 };
 
@@ -115,7 +115,7 @@ impl EncodeSymbolic for CborType {
             CborType::Map(m) => encode_map(m),
             CborType::Indefinite(x) => encode_indefinite(x),
             CborType::Tagged(_) => todo!(),
-            CborType::Float(_) => todo!(),
+            CborType::Float(x) => encode_float(x),
         }
     }
 }
@@ -241,6 +241,15 @@ fn encode_map(map: &Map) -> Vec<Element> {
         elements.extend(v.encode_symbolic());
     }
     elements
+}
+
+fn encode_float(f: &Float) -> Vec<Element> {
+    let element = match f {
+        Float::F16(n) => Element::new(Major::Misc, AdnInfo::FLOAT16, n.to_be_bytes()),
+        Float::F32(n) => Element::new(Major::Misc, AdnInfo::FLOAT32, n.to_be_bytes()),
+        Float::F64(n) => Element::new(Major::Misc, AdnInfo::FLOAT64, n.to_be_bytes()),
+    };
+    vec![element]
 }
 
 impl Encode for Vec<Element> {
