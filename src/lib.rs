@@ -299,8 +299,27 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub struct Array(pub Vec<CborType>);
 
+impl<T> From<Vec<T>> for Array
+where
+    T: Into<CborType>,
+{
+    fn from(v: Vec<T>) -> Self {
+        Array(v.into_iter().map(|x| x.into()).collect())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Map(Vec<(CborType, CborType)>);
+
+impl<K, V> From<Vec<(K, V)>> for Map
+where
+    K: Into<CborType>,
+    V: Into<CborType>,
+{
+    fn from(v: Vec<(K, V)>) -> Self {
+        Map(v.into_iter().map(|(k, v)| (k.into(), v.into())).collect())
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Float {
@@ -426,15 +445,25 @@ impl From<TextString> for CborType {
     }
 }
 
-impl From<Vec<CborType>> for CborType {
-    fn from(x: Vec<CborType>) -> CborType {
-        CborType::Array(Array(x))
+impl<T> From<Vec<T>> for CborType
+where
+    T: Into<CborType>,
+{
+    fn from(x: Vec<T>) -> CborType {
+        let list: Vec<CborType> = x.into_iter().map(|i| i.into()).collect();
+        CborType::Array(Array(list))
     }
 }
 
-impl From<Vec<(CborType, CborType)>> for CborType {
-    fn from(x: Vec<(CborType, CborType)>) -> CborType {
-        CborType::Map(Map(x))
+impl<K, V> From<Vec<(K, V)>> for CborType
+where
+    K: Into<CborType>,
+    V: Into<CborType>,
+{
+    fn from(x: Vec<(K, V)>) -> CborType {
+        let list: Vec<(CborType, CborType)> =
+            x.into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+        CborType::Map(Map(list))
     }
 }
 
