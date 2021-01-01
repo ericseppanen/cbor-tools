@@ -1,4 +1,4 @@
-use cbor_tools::{ByteString, CborType, Encode, Float, Indefinite, Integer, TextString};
+use cbor_tools::{ByteString, CborType, Encode, Float, Indefinite, Integer, Tag, TextString};
 use half::f16;
 use hex_literal::hex;
 use std::convert::TryFrom;
@@ -308,15 +308,47 @@ fn floats() {
 
     // RFC 7049 suggests that the 16-bit representation of infinity/NaN is the canonical
     // one, but then has example outputs for all three sizes.
-    assert_eq!(CborType::Float(Float::F32(f32::INFINITY)).encode(), hex!("fa7f800000"));
-    assert_eq!(CborType::Float(Float::F32(f32::NAN)).encode(), hex!("fa7fc00000"));
-    assert_eq!(CborType::Float(Float::F32(f32::NEG_INFINITY)).encode(), hex!("faff800000"));
-    assert_eq!(CborType::Float(Float::F64(f64::INFINITY)).encode(), hex!("fb7ff0000000000000"));
-    assert_eq!(CborType::Float(Float::F64(f64::NAN)).encode(), hex!("fb7ff8000000000000"));
-    assert_eq!(CborType::Float(Float::F64(f64::NEG_INFINITY)).encode(), hex!("fbfff0000000000000"));
+    assert_eq!(
+        CborType::Float(Float::F32(f32::INFINITY)).encode(),
+        hex!("fa7f800000")
+    );
+    assert_eq!(
+        CborType::Float(Float::F32(f32::NAN)).encode(),
+        hex!("fa7fc00000")
+    );
+    assert_eq!(
+        CborType::Float(Float::F32(f32::NEG_INFINITY)).encode(),
+        hex!("faff800000")
+    );
+    assert_eq!(
+        CborType::Float(Float::F64(f64::INFINITY)).encode(),
+        hex!("fb7ff0000000000000")
+    );
+    assert_eq!(
+        CborType::Float(Float::F64(f64::NAN)).encode(),
+        hex!("fb7ff8000000000000")
+    );
+    assert_eq!(
+        CborType::Float(Float::F64(f64::NEG_INFINITY)).encode(),
+        hex!("fbfff0000000000000")
+    );
 
     // We can deliberately encode non-canonical values.
-    assert_eq!(CborType::Float(Float::F32(1.5)).encode(), hex!("fa3fc00000"));
-    assert_eq!(CborType::Float(Float::F64(1.5)).encode(), hex!("fb3ff8000000000000"));
+    assert_eq!(
+        CborType::Float(Float::F32(1.5)).encode(),
+        hex!("fa3fc00000")
+    );
+    assert_eq!(
+        CborType::Float(Float::F64(1.5)).encode(),
+        hex!("fb3ff8000000000000")
+    );
+}
 
+#[test]
+fn tags() {
+    // RFC 7049 2.4 (roughly)
+    let bytestring = CborType::from(&[0u8; 12][..]);
+    let tagged = CborType::Tagged(Tag::POS_BIGNUM.wrap(bytestring));
+    eprintln!("{:x?}", tagged.encode());
+    assert_eq!(tagged.encode(), hex!("c2 4c 000000000000000000000000"));
 }

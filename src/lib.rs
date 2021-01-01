@@ -310,6 +310,48 @@ pub enum Float {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Tagged {
+    tag: Tag,
+    child: Box<CborType>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Tag(u64);
+
+impl Tag {
+    pub const STD_DATE_TIME: Tag = Tag(0);
+    pub const EPOCH_DATE_TIME: Tag = Tag(1);
+    pub const POS_BIGNUM: Tag = Tag(2);
+    pub const NEG_BIGNUM: Tag = Tag(3);
+    pub const DECIMAL_FRACTION: Tag = Tag(4);
+    pub const BIGFLOAT: Tag = Tag(5);
+    pub const EXPECT_BASE64URL: Tag = Tag(21);
+    pub const EXPECT_BASE64: Tag = Tag(22);
+    pub const EXPECT_BASE16: Tag = Tag(23);
+    pub const CBOR_DATA: Tag = Tag(24);
+    pub const URI: Tag = Tag(32);
+    pub const BASE64URL: Tag = Tag(33);
+    pub const BASE64: Tag = Tag(34);
+    pub const REGEXP: Tag = Tag(35);
+    pub const MIME: Tag = Tag(36);
+    pub const SELF_DESC_CBOR: Tag = Tag(55799);
+}
+
+impl Tag {
+    // Use the tag value to create a new Tagged struct.
+    // This saves a little typing. Instead of:
+    //    Tagged::new(Tag::POS_BIGNUM, bytestring)
+    // one can instead type:
+    //    Tag::POS_BIGNUM.wrap(bytestring)
+    pub fn wrap(self, child: CborType) -> Tagged {
+        Tagged {
+            tag: self,
+            child: Box::new(child),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum CborType {
     Null,
     Undefined,
@@ -320,7 +362,7 @@ pub enum CborType {
     Array(Array),
     Map(Map),
     Indefinite(Indefinite),
-    Tagged(Box<CborType>),
+    Tagged(Tagged),
     Float(Float),
 }
 

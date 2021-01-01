@@ -1,7 +1,8 @@
 use crate::{
     Array, ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Float, Indefinite,
-    Integer, Map, TextString,
+    Integer, Map, Tagged, TextString,
 };
+use std::convert::TryInto;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -114,7 +115,7 @@ impl EncodeSymbolic for CborType {
             CborType::Array(x) => encode_array(x),
             CborType::Map(m) => encode_map(m),
             CborType::Indefinite(x) => encode_indefinite(x),
-            CborType::Tagged(_) => todo!(),
+            CborType::Tagged(x) => encode_tagged(x),
             CborType::Float(x) => encode_float(x),
         }
     }
@@ -150,10 +151,18 @@ fn encode_integer(x: &Integer) -> Vec<Element> {
 
 // Encode a text- or byte-string into an Element.
 fn encode_bytes(major: Major, v: &[u8]) -> Element {
-    let len = v.len();
-    let mut element = encode_length(major, len);
+    let mut element = encode_length(major, v.len());
     element.add_bytes(v);
     element
+}
+
+// Adapter for places that have a usize in hand.
+// Hopefully this is optimized away, as usize->u64 should
+// always succeed.
+#[inline]
+fn encode_length(major: Major, len: usize) -> Element {
+    let len: u64 = len.try_into().expect("usize to u64");
+    encode_immediate(major, len)
 }
 
 // Helper function for length values
@@ -162,27 +171,27 @@ fn encode_bytes(major: Major, v: &[u8]) -> Element {
 // This is incomplete for definite-length byte/text-strings,
 // which need to have the string bytes appended.
 // It is correct for arrays or maps.
-fn encode_length(major: Major, len: usize) -> Element {
+fn encode_immediate(major: Major, len: u64) -> Element {
     if len < 24 {
         Element::new(major, AdnInfo(len as u8), Nada)
     } else if len < 0x100 {
         // 1 byte needed to express length.
-        let mut buf = Vec::with_capacity(len + 1);
+        let mut buf = Vec::new();
         buf.push(len as u8);
         Element::new(major, AdnInfo::MORE1, buf)
     } else if len < 0x10000 {
         // 2 bytes needed to express length.
-        let mut buf = Vec::with_capacity(len + 2);
+        let mut buf = Vec::new();
         buf.extend(&(len as u16).to_be_bytes());
         Element::new(major, AdnInfo::MORE2, buf)
     } else if len < 0x100000000 {
         // 4 bytes needed to express length.
-        let mut buf = Vec::with_capacity(len + 4);
+        let mut buf = Vec::new();
         buf.extend(&(len as u32).to_be_bytes());
         Element::new(major, AdnInfo::MORE4, buf)
     } else {
         // 8 bytes needed to express length.
-        let mut buf = Vec::with_capacity(len + 8);
+        let mut buf = Vec::new();
         buf.extend(&(len as u64).to_be_bytes());
         Element::new(major, AdnInfo::MORE8, buf)
     }
@@ -250,6 +259,14 @@ fn encode_float(f: &Float) -> Vec<Element> {
         Float::F64(n) => Element::new(Major::Misc, AdnInfo::FLOAT64, n.to_be_bytes()),
     };
     vec![element]
+}
+
+fn encode_tagged(x: &Tagged) -> Vec<Element> {
+    let tag = encode_immediate(Major::Tag, x.tag.0);
+    let mut v = Vec::<Element>::new();
+    v.push(tag);
+    v.extend(x.child.encode_symbolic());
+    v
 }
 
 impl Encode for Vec<Element> {
