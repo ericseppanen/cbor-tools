@@ -2,7 +2,6 @@ use crate::{
     Array, ByteString, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite,
     Integer, Map, TextString,
 };
-use byteorder::{ByteOrder, NetworkEndian};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -129,41 +128,6 @@ fn encode_indefinite(ind: &Indefinite) -> Vec<Element> {
     }
 }
 
-trait ToNetworkEndian {
-    type OutBuf;
-    fn to_ne(&self) -> Self::OutBuf;
-}
-
-impl ToNetworkEndian for u16 {
-    type OutBuf = [u8; 2];
-
-    fn to_ne(&self) -> Self::OutBuf {
-        let mut buf = Self::OutBuf::default();
-        NetworkEndian::write_u16(&mut buf, *self);
-        buf
-    }
-}
-
-impl ToNetworkEndian for u32 {
-    type OutBuf = [u8; 4];
-
-    fn to_ne(&self) -> Self::OutBuf {
-        let mut buf = Self::OutBuf::default();
-        NetworkEndian::write_u32(&mut buf, *self);
-        buf
-    }
-}
-
-impl ToNetworkEndian for u64 {
-    type OutBuf = [u8; 8];
-
-    fn to_ne(&self) -> Self::OutBuf {
-        let mut buf = Self::OutBuf::default();
-        NetworkEndian::write_u64(&mut buf, *self);
-        buf
-    }
-}
-
 /// Encode an integer.
 ///
 /// This does not attempt to canonicalize the integer size; a small number stored
@@ -172,14 +136,14 @@ fn encode_integer(x: &Integer) -> Vec<Element> {
     let element = match *x {
         Integer::U5(n) => Element::new(Major::Uint, AdnInfo(*n), Nada),
         Integer::U8(n) => Element::new(Major::Uint, AdnInfo::MORE1, vec![n]),
-        Integer::U16(n) => Element::new(Major::Uint, AdnInfo::MORE2, n.to_ne()),
-        Integer::U32(n) => Element::new(Major::Uint, AdnInfo::MORE4, n.to_ne()),
-        Integer::U64(n) => Element::new(Major::Uint, AdnInfo::MORE8, n.to_ne()),
+        Integer::U16(n) => Element::new(Major::Uint, AdnInfo::MORE2, n.to_be_bytes()),
+        Integer::U32(n) => Element::new(Major::Uint, AdnInfo::MORE4, n.to_be_bytes()),
+        Integer::U64(n) => Element::new(Major::Uint, AdnInfo::MORE8, n.to_be_bytes()),
         Integer::N5(n) => Element::new(Major::Nint, AdnInfo(*n), Nada),
         Integer::N8(n) => Element::new(Major::Nint, AdnInfo::MORE1, vec![n]),
-        Integer::N16(n) => Element::new(Major::Nint, AdnInfo::MORE2, n.to_ne()),
-        Integer::N32(n) => Element::new(Major::Nint, AdnInfo::MORE4, n.to_ne()),
-        Integer::N64(n) => Element::new(Major::Nint, AdnInfo::MORE8, n.to_ne()),
+        Integer::N16(n) => Element::new(Major::Nint, AdnInfo::MORE2, n.to_be_bytes()),
+        Integer::N32(n) => Element::new(Major::Nint, AdnInfo::MORE4, n.to_be_bytes()),
+        Integer::N64(n) => Element::new(Major::Nint, AdnInfo::MORE8, n.to_be_bytes()),
     };
     vec![element]
 }
@@ -209,17 +173,17 @@ fn encode_length(major: Major, len: usize) -> Element {
     } else if len < 0x10000 {
         // 2 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 2);
-        buf.extend(&(len as u16).to_ne());
+        buf.extend(&(len as u16).to_be_bytes());
         Element::new(major, AdnInfo::MORE2, buf)
     } else if len < 0x100000000 {
         // 4 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 4);
-        buf.extend(&(len as u32).to_ne());
+        buf.extend(&(len as u32).to_be_bytes());
         Element::new(major, AdnInfo::MORE4, buf)
     } else {
         // 8 bytes needed to express length.
         let mut buf = Vec::with_capacity(len + 8);
-        buf.extend(&(len as u64).to_ne());
+        buf.extend(&(len as u64).to_be_bytes());
         Element::new(major, AdnInfo::MORE8, buf)
     }
 }
