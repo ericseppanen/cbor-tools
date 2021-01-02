@@ -1,4 +1,4 @@
-//! `cbor-tools` is a library for manipulating CBOR-encoded data.
+//! `cbor-tools` is a toolkit for manipulating CBOR-encoded data.
 //!
 //! **CBOR** is a data serialization format described in [RFC7049].
 //! CBOR is a binary-friendly self-describing data encoding that has
@@ -9,7 +9,7 @@
 //! - Arbitrary-length bytestrings
 //!
 //! Other crates provide `serde` serialization and deserialization of
-//! native Rust data structurs.
+//! native Rust data structures.
 //!
 //! This crate provides tools for constructing CBOR with fine-grained
 //! control, including:
@@ -20,7 +20,7 @@
 //! - malformed sequences (for testing decoders, perhaps)
 //!
 //! To encode some data in CBOR, create one or more [`CborType`] values,
-//! and then call [`encode`] on them:
+//! and then call [`encode()`] on them:
 //!
 //! ```
 //! use cbor_tools::{CborType, Encode};
@@ -50,35 +50,67 @@
 //! ```
 //!
 //! [RFC7049]: https://tools.ietf.org/html/rfc7049
-//! [`encode`]: Encode::encode
+//! [`encode()`]: Encode::encode
 //!
+
+#![warn(missing_docs)]
+#![forbid(unsafe_code)]
+#![warn(clippy::cast_possible_truncation)]
 
 use half::f16;
 use std::fmt;
 use std::{convert::TryFrom, ops::Deref};
 
+/// Specifies the exact binary format of CBOR data.
 pub mod format;
 
 /// CBOR Integer type
 ///
-/// CBOR major type 0: unsigned integer
-/// CBOR major type 1: negative integer
+/// ```
+/// use cbor_tools::{CborType, Integer, Encode};
+///
+/// let val = Integer::from(123);
+/// // This is the CBOR encoding for an 8-bit integer.
+/// assert_eq!(CborType::from(val).encode(), vec![0x18, 0x7B]);
+/// ```
+///
+/// CBOR integers will be represented in "canonical" form if the
+/// `From<u8 | u32 | u64>` impls are used. Non-canonical forms can
+/// be created by initializing the struct directly:
+/// ```
+/// # use cbor_tools::{CborType, Integer, Encode};
+/// let val = Integer::U32(100);
+/// assert_eq!(CborType::from(val).encode(), vec![0x1a, 0, 0, 0, 0x64]);
+/// ```
+///
+/// Note: integers outside the range of [-2^64, 2^64-1] should be encoded
+/// as byte strings instead.
 #[derive(Clone, PartialEq)]
 pub enum Integer {
+    /// A value between 0 and 23.
     U5(ZeroTo23), // FIXME: use some bit-field crate?
+    /// An 8-bit non-negative integer.
     U8(u8),
+    /// A 16-bit non-negative integer.
     U16(u16),
+    /// A 32-bit non-negative integer.
     U32(u32),
+    /// A 64-bit non-negative integer
     U64(u64),
     // Because negative integers have a broader range than
     // signed integers, they are pre-encoded as a negative
     // offset from -1.
     // FIXME: need a custom Debug implementation that understands
     // the offset, otherwise this will be confusing.
+    /// A small negative integer (between -1 and -24)
     N5(ZeroTo23),
+    /// An 8-bit negative integer.
     N8(u8),
+    /// A 16-bit negative integer.
     N16(u16),
+    /// A 32-bit negative integer.
     N32(u32),
+    /// A 64-bit negative integer.
     N64(u64),
 }
 
@@ -137,10 +169,14 @@ impl fmt::Debug for Integer {
     }
 }
 
+/// An integer value in the range 0 to 23, inclusive.
 #[derive(Copy, Clone, PartialEq)]
 pub struct ZeroTo23(u8);
 
 impl ZeroTo23 {
+    /// Create a new ZeroTo23.
+    ///
+    /// Will panic if the input is outside the expected range.
     pub fn new(x: u8) -> Self {
         if x >= 24 {
             panic!("too big for ZeroTo23::new()");
@@ -152,6 +188,9 @@ impl ZeroTo23 {
 impl Deref for ZeroTo23 {
     type Target = u8;
 
+    /// Extract the integer value.
+    ///
+    /// Will panic if the stored value is outside the expected range.
     fn deref(&self) -> &Self::Target {
         if self.0 >= 24 {
             panic!("ZeroTo23 is out of range");
@@ -266,8 +305,10 @@ impl From<i64> for Integer {
     }
 }
 
-// In CBOR, only 64-bit positive and negative integers are supported.
-// If your integer is out of this range, use a byte-stream instead.
+/// The integer value was too large to be represented as a CBOR integer.
+///
+/// In CBOR, only 64-bit positive and negative integers are supported.
+/// If your integer is out of this range, use a byte-stream instead.
 #[derive(Clone, Copy, Debug)]
 pub struct IntOverflowError;
 
@@ -325,6 +366,18 @@ impl From<f64> for Float {
     }
 }
 
+/// A byte string.
+///
+/// A "byte string" in CBOR is an arbitrary length array of bytes.
+///
+/// ```
+/// use cbor_tools::{CborType, ByteString, Encode};
+///
+/// let bytes = [1u8, 2, 3, 4];
+/// let val = ByteString::from(&bytes[..]);
+/// assert_eq!(CborType::from(val).encode(), vec![0x44, 1, 2, 3, 4]);
+/// ```
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct ByteString(Vec<u8>);
 
@@ -338,6 +391,16 @@ where
     }
 }
 
+/// A UTF-8 text string.
+///
+/// ```
+/// use cbor_tools::{CborType, TextString, Encode};
+///
+/// let name = "Foo!";
+/// let val = TextString::from(name);
+/// assert_eq!(CborType::from(val).encode(), vec![0x64, 0x46, 0x6f, 0x6f, 0x21]);
+/// ```
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextString(String);
 
@@ -351,6 +414,18 @@ where
     }
 }
 
+/// An array of values.
+///
+/// In CBOR, arrays may have members of different types.
+///
+/// Use `Array::from()` to construct an array.
+///
+/// ```
+/// # use cbor_tools::{CborType, Array, Encode};
+/// let nums = vec![1, 2, 3];
+/// let array = Array::from(nums);
+/// assert_eq!(CborType::from(array).encode(), vec![0x83, 1, 2, 3]);
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct Array(pub Vec<CborType>);
 
@@ -363,6 +438,19 @@ where
     }
 }
 
+/// An map of (key, value) pairs.
+///
+/// In CBOR, each key and value may be of different types.
+///
+/// Use `Map::from()` to construct a map.
+///
+/// ```
+/// # use cbor_tools::{CborType, Map, Encode};
+/// let map_pairs = vec![(1, 2), (3, 4)];
+/// let map = Map::from(map_pairs);
+/// assert_eq!(CborType::from(map).encode(), vec![0xa2, 1, 2, 3, 4]);
+/// ```
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Map(Vec<(CborType, CborType)>);
 
@@ -376,22 +464,43 @@ where
     }
 }
 
+/// A floating-point value.
+///
+/// Use `Float::from()` to construct a `Float`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Float {
+    /// IEEE 754 Half-Precision Float (16 bits)
     F16(f16),
+    /// IEEE 754 Single-Precision Float (32 bits)
     F32(f32),
+    /// IEEE 754 Double-Precision Float (64 bits)
     F64(f64),
 }
 
+/// A tagged value.
+///
+/// A Tagged value contains a numeric tag, which specifies
+/// some additional information, and a payload value, which
+/// may be of any type (though some tags are only expected
+/// to be used with particular types).
+///
+/// Use [`Tag::wrap`] to create a `Tagged`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tagged {
     tag: Tag,
     child: Box<CborType>,
 }
 
+/// A tag value for use with [`Tagged`]
+///
+/// Tags are just integers; this type exists to avoid any
+/// type confusion when passing them as function arguments.
+///
+/// See RFC 7049 2.4 for details.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Tag(u64);
 
+#[allow(missing_docs)]
 impl Tag {
     pub const STD_DATE_TIME: Tag = Tag(0);
     pub const EPOCH_DATE_TIME: Tag = Tag(1);
@@ -412,11 +521,23 @@ impl Tag {
 }
 
 impl Tag {
-    // Use the tag value to create a new Tagged struct.
-    // This saves a little typing. Instead of:
-    //    Tagged::new(Tag::POS_BIGNUM, bytestring)
-    // one can instead type:
-    //    Tag::POS_BIGNUM.wrap(bytestring)
+    /// Use the [`Tag`] value to create a new [`Tagged`] struct.
+    ///
+    /// This saves a little typing. Instead of:
+    /// ```compile_fail
+    /// # // doesn't build; there is no `new` fn.
+    /// # use cbor_tools::{CborType, Tag, Tagged};
+    /// # let bytestring = CborType::from(&[0u8; 12][..]);
+    /// Tagged::new(Tag::POS_BIGNUM, bytestring)
+    /// # ;
+    /// ```
+    /// one can instead type:
+    /// ```
+    /// # use cbor_tools::{CborType, Tag};
+    /// # let bytestring = CborType::from(&[0u8; 12][..]);
+    /// Tag::POS_BIGNUM.wrap(bytestring)
+    /// # ;
+    ///```
     pub fn wrap(self, child: CborType) -> Tagged {
         Tagged {
             tag: self,
@@ -425,7 +546,26 @@ impl Tag {
     }
 }
 
+/// A CBOR value.
+///
+/// This enum can represent any CBOR value; see the documentation
+/// of each variant for more details.
+///
+/// Many variants can be constructed directly using `from()`.
+/// For example,
+/// ```
+/// # use cbor_tools::CborType;
+/// let i = 42;
+/// let x = CborType::from(i);
+/// ```
+/// produces the same value as
+/// ```
+/// # use cbor_tools::{CborType, Integer};
+/// let i = 42;
+/// let x = CborType::Integer(Integer::from(i));
+/// ```
 #[derive(Debug, Clone, PartialEq)]
+#[allow(missing_docs)]
 pub enum CborType {
     Null,
     Undefined,
@@ -442,6 +582,7 @@ pub enum CborType {
 
 /// Indefinite-length bytestrings, textstrings, arrays, and maps.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(missing_docs)]
 pub enum Indefinite {
     ByteString(Vec<ByteString>),
     TextString(Vec<TextString>),
@@ -500,6 +641,18 @@ impl From<TextString> for CborType {
     }
 }
 
+impl From<Array> for CborType {
+    fn from(x: Array) -> CborType {
+        CborType::Array(x)
+    }
+}
+
+impl From<Map> for CborType {
+    fn from(x: Map) -> CborType {
+        CborType::Map(x)
+    }
+}
+
 impl<T> From<Vec<T>> for CborType
 where
     T: Into<CborType>,
@@ -522,23 +675,30 @@ where
     }
 }
 
+#[doc(hidden)]
 pub trait Canonical {
     fn is_canonical(&self) -> bool;
     fn to_canonical(&self) -> Self; // or Cow<Self> ?
 }
 
+/// Binary CBOR encoding.
 pub trait Encode {
+    /// Encode data to  bytes.
     fn encode(&self) -> Vec<u8>;
 }
 
+/// Symbolic CBOR encoding.
 pub trait EncodeSymbolic {
+    /// Encode data to [`format::Element`] symbols representing a CBOR encoding.
     fn encode_symbolic(&self) -> Vec<format::Element>;
 }
 
+#[doc(hidden)]
 pub trait Decode {
     fn decode(&self) -> Vec<CborType>;
 }
 
+#[doc(hidden)]
 pub trait DecodeSymbolic {
     fn decode_symbolic(&self) -> Vec<format::Element>;
 }

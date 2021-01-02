@@ -4,31 +4,52 @@ use crate::{
 };
 use std::convert::TryInto;
 
+/// The major number in a CBOR encoding
+///
+/// The major number is 3 bits long, and identifies the basic
+/// type of a CBOR-encoded value.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Major {
+    /// An unsigned integer
     Uint = 0,
+    /// A negative integer
     Nint = 1,
+    /// A byte string
     Bstr = 2,
+    /// A text string
     Tstr = 3,
+    /// An array
     Array = 4,
+    /// A map
     Map = 5,
+    /// A tagged value
     Tag = 6,
+    /// Miscellaneous types (floats, bool, null, etc)
     Misc = 7,
 }
 
+/// The "additional information" field
+///
+/// This is a 5-bit field used to communicate some more
+/// detail about the value; it's commonly used to communicate
+/// simple values (True, False, Null) or specify how many bytes
+/// are to follow.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AdnInfo(u8);
 
+#[allow(missing_docs)]
 impl AdnInfo {
-    // Additional Information 24 to 27 are used to communicate
-    // 1, 2, 4, or 8 bytes following.
+    /// 1 byte to follow.
     pub const MORE1: AdnInfo = AdnInfo(24);
+    /// 2 bytes to follow.
     pub const MORE2: AdnInfo = AdnInfo(25);
+    /// 4 bytes to follow.
     pub const MORE4: AdnInfo = AdnInfo(26);
+    /// 8 bytes to follow.
     pub const MORE8: AdnInfo = AdnInfo(27);
 
-    // Indefinite-length byte- or text- strings begin with this
+    /// Indefinite-length encoding is used.
     pub const INDEFINITE: AdnInfo = AdnInfo(31);
 
     // In major type 7, a number of values are used for special purposes.
@@ -39,6 +60,7 @@ impl AdnInfo {
     pub const FLOAT16: AdnInfo = AdnInfo(25);
     pub const FLOAT32: AdnInfo = AdnInfo(26);
     pub const FLOAT64: AdnInfo = AdnInfo(27);
+    /// Terminate an indefinite-length encoding.
     pub const BREAK: AdnInfo = AdnInfo(31);
 }
 
@@ -58,6 +80,14 @@ struct UseDefLen(bool);
 const AS_DEF: UseDefLen = UseDefLen(true);
 const AS_INDEF: UseDefLen = UseDefLen(false);
 
+/// A unit of CBOR-encoded data
+///
+/// Each `Element` contains:
+/// - A major number, indicating the type of data.
+/// - An "additional information" field.
+/// - An optional sequence of payload bytes.
+///
+/// Some [`CborType`] values will require multiple [`Element`]s to encode.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Element {
     major: Major,
