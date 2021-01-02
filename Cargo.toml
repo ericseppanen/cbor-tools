@@ -15,6 +15,7 @@ half = "1.6"
 
 [dev-dependencies]
 hex-literal = "0.3"
+serde_cbor = "0.11.1"
 
 [package.metadata.release]
 no-dev-version = true
