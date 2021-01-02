@@ -15,3 +15,7 @@ half = "1.6"
 
 [dev-dependencies]
 hex-literal = "0.3"
+
+[package.metadata.release]
+no-dev-version = true
+pre-release-commit-message = "release {{version}}"
