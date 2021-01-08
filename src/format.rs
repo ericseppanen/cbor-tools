@@ -1,6 +1,6 @@
 use crate::{
     Array, ByteString, CborType, Decode, DecodeError, DecodeSymbolic, Encode, EncodeSymbolic,
-    Float, Indefinite, Integer, Map, Tagged, TextString,
+    Float, Indefinite, Integer, Map, Tagged, TextString, ZeroTo23,
 };
 use half::f16;
 use num_enum::TryFromPrimitive;
@@ -252,9 +252,57 @@ impl Element {
 
 impl Decode for Vec<Element> {
     fn decode(&self) -> Result<Vec<CborType>, DecodeError> {
-        // Decode Elements to CborType
-        todo!()
+        let mut result = Vec::new();
+        let mut input = self.iter();
+        loop {
+            let decoded = match input.next() {
+                None => break,
+                Some(element) => match element.major {
+                    Major::Misc => decode_misc(element),
+                    Major::Uint => decode_uint(element),
+                    Major::Nint => decode_nint(element),
+                    _ => todo!(),
+                },
+            }?;
+            result.push(decoded);
+        }
+        Ok(result)
     }
+}
+
+fn decode_misc(element: &Element) -> Result<CborType, DecodeError> {
+    let decoded = match element.adn_info {
+        AdnInfo::FALSE => CborType::Bool(false),
+        AdnInfo::TRUE => CborType::Bool(true),
+        AdnInfo::NULL => CborType::Null,
+        AdnInfo::UNDEFINED => CborType::Undefined,
+        _ => todo!(),
+    };
+    Ok(decoded)
+}
+
+fn decode_uint(element: &Element) -> Result<CborType, DecodeError> {
+    let decoded = match (element.adn_info, element.imm) {
+        (AdnInfo(n), ImmediateValue::Empty) if n < 24 => Integer::U5(ZeroTo23::new(n)),
+        (AdnInfo::MORE1, ImmediateValue::Bytes1(b)) => Integer::U8(b[0]),
+        (AdnInfo::MORE2, ImmediateValue::Bytes2(b)) => Integer::U16(u16::from_be_bytes(b)),
+        (AdnInfo::MORE4, ImmediateValue::Bytes4(b)) => Integer::U32(u32::from_be_bytes(b)),
+        (AdnInfo::MORE8, ImmediateValue::Bytes8(b)) => Integer::U64(u64::from_be_bytes(b)),
+        _ => panic!("nonsensical uint element"),
+    };
+    Ok(decoded.into())
+}
+
+fn decode_nint(element: &Element) -> Result<CborType, DecodeError> {
+    let decoded = match (element.adn_info, element.imm) {
+        (AdnInfo(n), ImmediateValue::Empty) if n < 24 => Integer::N5(ZeroTo23::new(n)),
+        (AdnInfo::MORE1, ImmediateValue::Bytes1(b)) => Integer::N8(b[0]),
+        (AdnInfo::MORE2, ImmediateValue::Bytes2(b)) => Integer::N16(u16::from_be_bytes(b)),
+        (AdnInfo::MORE4, ImmediateValue::Bytes4(b)) => Integer::N32(u32::from_be_bytes(b)),
+        (AdnInfo::MORE8, ImmediateValue::Bytes8(b)) => Integer::N64(u64::from_be_bytes(b)),
+        _ => panic!("nonsensical uint element"),
+    };
+    Ok(decoded.into())
 }
 
 // In the future this could complete the convertion to [u8; N]
