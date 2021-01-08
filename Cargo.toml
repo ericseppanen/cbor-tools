@@ -12,6 +12,7 @@ edition = "2018"
 
 [dependencies]
 half = "1.6"
+num_enum = "0.5"
 
 [dev-dependencies]
 hex-literal = "0.3"

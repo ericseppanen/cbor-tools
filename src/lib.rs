@@ -693,14 +693,23 @@ pub trait EncodeSymbolic {
     fn encode_symbolic(&self) -> Vec<format::Element>;
 }
 
-#[doc(hidden)]
-pub trait Decode {
-    fn decode(&self) -> Vec<CborType>;
+/// An error that may occur when decoding CBOR Data.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DecodeError {
+    /// Not enough bytes were available to complete decoding.
+    Underrun,
 }
 
-#[doc(hidden)]
+/// Binary CBOR encoding.
+pub trait Decode {
+    /// Decode data to a [`CborType`] list.
+    fn decode(&self) -> Result<Vec<CborType>, DecodeError>;
+}
+
+/// Symbolic CBOR decoding.
 pub trait DecodeSymbolic {
-    fn decode_symbolic(&self) -> Vec<format::Element>;
+    /// Decode data to a low-level [`format::Element`] list.
+    fn decode_symbolic(&self) -> Result<Vec<format::Element>, DecodeError>;
 }
 
 impl EncodeSymbolic for Vec<CborType> {
