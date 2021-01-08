@@ -20,8 +20,7 @@ fn text_strings() {
     assert_eq!(CborType::from("\"\\").encode(), hex!("62 225c"));
     assert_eq!(CborType::from("\u{00fc}").encode(), hex!("62 c3bc"));
     assert_eq!(CborType::from("\u{6c34}").encode(), hex!("63e6b0b4"));
-    // Rust doesn't accept this as valid UTF-8.
-    //assert_eq!(CborType::from("\u{d800}\u{dd51}").encode(), hex!("64f0908591"));
+    assert_eq!(CborType::from("\u{10151}").encode(), hex!("64f0908591"));
 
     // A 256-byte string
     let s = String::from("12345678").repeat(32);

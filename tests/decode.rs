@@ -1,5 +1,5 @@
 use cbor_tools::format::{AdnInfo, Element, ImmediateValue, Major};
-use cbor_tools::{CborType, Decode, DecodeSymbolic, Integer};
+use cbor_tools::{CborType, Decode, DecodeError, DecodeSymbolic, Integer, TextString};
 use hex_literal::hex;
 use std::convert::TryFrom;
 
@@ -176,4 +176,57 @@ fn nint() {
     assert_n32(&hex!("3a ffff ffff"), -1_i64 << 32);
     assert_n64(&hex!("3b 0000 0001 0000 0000"), (-1_i128 << 32) - 1);
     assert_n64(&hex!("3b ffff ffff ffff ffff"), -1_i128 << 64);
+}
+
+#[test]
+fn bytestring() {
+    #[track_caller]
+    fn assert_bytestring(buf: &[u8], expected: &[u8]) {
+        let symbolic = buf.decode_symbolic().unwrap();
+        // TODO: assert correct length in adn_info + imm.
+        //assert_eq!(symbolic, vec![Element::simple(Major::Bstr, ...)]);
+        assert_eq!(symbolic.decode(), Ok(vec![CborType::from(expected)]));
+    }
+
+    assert_bytestring(&hex!("40"), b"");
+    assert_bytestring(&hex!("4401020304"), b"\x01\x02\x03\x04");
+
+    // TODO:
+    // bytestring that is truncated
+    // bytestring with a bogus adn_info field (neither <24 nor MORE1..MORE8)
+}
+
+#[test]
+fn textstring() {
+    #[track_caller]
+    fn assert_textstring(buf: &[u8], expected: &str) {
+        let symbolic = buf.decode_symbolic().unwrap();
+        // TODO: assert correct length in adn_info + imm.
+        //assert_eq!(symbolic, vec![Element::simple(Major::Tstr, ...)]);
+
+        // FIXME: remove this, it's just for debug
+        for cbor_type in symbolic.decode().unwrap() {
+            if let CborType::TextString(TextString(txt)) = cbor_type {
+                eprintln!("{}", txt.escape_unicode());
+            }
+        }
+        assert_eq!(dbg!(symbolic.decode()), Ok(vec![CborType::from(expected)]));
+    }
+
+    // examples from RFC 7049
+    assert_textstring(&hex!("60"), "");
+    assert_textstring(&hex!("61 61"), "a");
+    assert_textstring(&hex!("64 49455446"), "IETF");
+    assert_textstring(&hex!("62 225c"), "\"\\");
+    assert_textstring(&hex!("62 c3bc"), "\u{00fc}");
+    assert_textstring(&hex!("63 e6b0b4"), "\u{6c34}");
+    assert_textstring(&hex!("64 f0908591"), "\u{10151}");
+
+    // string with bad UTF-8
+    let bad_input = &hex!("64 fdd00000")[..];
+    assert_eq!(bad_input.decode().unwrap_err(), DecodeError::Utf8Error);
+
+    // TODO:
+    // string that is truncated
+    // string with a bogus adn_info field (neither <24 nor MORE1..MORE8)
 }

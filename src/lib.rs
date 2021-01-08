@@ -379,7 +379,7 @@ impl From<f64> for Float {
 /// ```
 ///
 #[derive(Debug, Clone, PartialEq)]
-pub struct ByteString(Vec<u8>);
+pub struct ByteString(pub Vec<u8>);
 
 impl<T> From<T> for ByteString
 where
@@ -402,7 +402,7 @@ where
 /// ```
 ///
 #[derive(Debug, Clone, PartialEq)]
-pub struct TextString(String);
+pub struct TextString(pub String);
 
 impl<T> From<T> for TextString
 where
@@ -698,6 +698,10 @@ pub trait EncodeSymbolic {
 pub enum DecodeError {
     /// Not enough bytes were available to complete decoding.
     Underrun,
+    /// A CBOR text string contains invalid UTF-8 data.
+    Utf8Error,
+    /// The byte sequence cannot be decoded as CBOR data.
+    Undecodable,
 }
 
 /// Binary CBOR encoding.

@@ -258,10 +258,28 @@ impl Decode for Vec<Element> {
             let decoded = match input.next() {
                 None => break,
                 Some(element) => match element.major {
-                    Major::Misc => decode_misc(element),
                     Major::Uint => decode_uint(element),
                     Major::Nint => decode_nint(element),
-                    _ => todo!(),
+                    Major::Bstr => {
+                        if element.adn_info == AdnInfo::INDEFINITE {
+                            // Indefinite-length byte string
+                            todo!()
+                        } else {
+                            decode_bstr(element)
+                        }
+                    }
+                    Major::Tstr => {
+                        if element.adn_info == AdnInfo::INDEFINITE {
+                            // Indefinite-length byte string
+                            todo!()
+                        } else {
+                            decode_tstr(element)
+                        }
+                    }
+                    Major::Array => todo!(),
+                    Major::Map => todo!(),
+                    Major::Tag => todo!(),
+                    Major::Misc => decode_misc(element),
                 },
             }?;
             result.push(decoded);
@@ -303,6 +321,15 @@ fn decode_nint(element: &Element) -> Result<CborType, DecodeError> {
         _ => panic!("nonsensical uint element"),
     };
     Ok(decoded.into())
+}
+
+fn decode_bstr(element: &Element) -> Result<CborType, DecodeError> {
+    Ok(CborType::ByteString(ByteString(element.bytes.clone())))
+}
+
+fn decode_tstr(element: &Element) -> Result<CborType, DecodeError> {
+    let text = String::from_utf8(element.bytes.clone()).map_err(|_| DecodeError::Utf8Error)?;
+    Ok(CborType::TextString(TextString(text)))
 }
 
 // In the future this could complete the convertion to [u8; N]
@@ -355,6 +382,18 @@ fn decode_imm(element: &mut Element, buf: &mut &[u8]) -> Result<(), DecodeError>
     Ok(())
 }
 
+fn get_length(element: &Element) -> Result<usize, DecodeError> {
+    match element.adn_info {
+        AdnInfo(n) if n < 24 => Ok(n as usize),
+        AdnInfo::MORE1 | AdnInfo::MORE2 | AdnInfo::MORE4 | AdnInfo::MORE8 => {
+            let length: u64 = element.imm.into();
+            let length: usize = length.try_into().unwrap();
+            Ok(length)
+        }
+        _ => Err(DecodeError::Undecodable),
+    }
+}
+
 impl DecodeSymbolic for [u8] {
     fn decode_symbolic(&self) -> Result<Vec<Element>, DecodeError> {
         let mut remaining = &self[..];
@@ -378,8 +417,7 @@ impl DecodeSymbolic for [u8] {
                     // FIXME: need to handle indefinite-length.
                     decode_imm(&mut element, &mut remaining)?;
                     // read that length, take that many more bytes as payload.
-                    let length: u64 = element.imm.into();
-                    let length: usize = length.try_into().unwrap();
+                    let length = get_length(&element)?;
                     let (head, tail) = try_split(&mut remaining, length)?;
                     element.bytes = head.into();
                     remaining = tail;
@@ -407,7 +445,7 @@ impl DecodeSymbolic for [u8] {
     }
 }
 
-impl Decode for Vec<u8> {
+impl Decode for [u8] {
     fn decode(&self) -> Result<Vec<CborType>, DecodeError> {
         self.decode_symbolic()?.decode()
     }
