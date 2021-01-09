@@ -1,5 +1,7 @@
 use cbor_tools::format::{AdnInfo, Element, ImmediateValue, Major};
-use cbor_tools::{CborType, Decode, DecodeError, DecodeSymbolic, Integer, TextString};
+use cbor_tools::{
+    ByteString, CborType, Decode, DecodeError, DecodeSymbolic, Indefinite, Integer, TextString,
+};
 use hex_literal::hex;
 use std::convert::TryFrom;
 
@@ -191,9 +193,18 @@ fn bytestring() {
     assert_bytestring(&hex!("40"), b"");
     assert_bytestring(&hex!("4401020304"), b"\x01\x02\x03\x04");
 
+    // indefinite length from RFC 7049: (_ h'0102', h'030405')
+    let expected = vec![vec![1u8, 2], vec![3u8, 4, 5]];
+    let expected = expected.into_iter().map(|x| ByteString::from(x)).collect();
+    let expected = CborType::Indefinite(Indefinite::ByteString(expected));
+    let buf = &hex!("5f 42 0102 43 030405 ff");
+    assert_eq!(buf.decode(), Ok(vec![CborType::from(expected)]));
+
     // TODO:
     // bytestring that is truncated
     // bytestring with a bogus adn_info field (neither <24 nor MORE1..MORE8)
+    // unterminated indefinite string
+    // indefinite string with bad substring type
 }
 
 #[test]
@@ -204,13 +215,7 @@ fn textstring() {
         // TODO: assert correct length in adn_info + imm.
         //assert_eq!(symbolic, vec![Element::simple(Major::Tstr, ...)]);
 
-        // FIXME: remove this, it's just for debug
-        for cbor_type in symbolic.decode().unwrap() {
-            if let CborType::TextString(TextString(txt)) = cbor_type {
-                eprintln!("{}", txt.escape_unicode());
-            }
-        }
-        assert_eq!(dbg!(symbolic.decode()), Ok(vec![CborType::from(expected)]));
+        assert_eq!(symbolic.decode(), Ok(vec![CborType::from(expected)]));
     }
 
     // examples from RFC 7049
@@ -222,6 +227,13 @@ fn textstring() {
     assert_textstring(&hex!("63 e6b0b4"), "\u{6c34}");
     assert_textstring(&hex!("64 f0908591"), "\u{10151}");
 
+    // indefinite length from RFC 7049: (_ "strea", "ming")
+    let expected = vec!["strea", "ming"];
+    let expected = expected.into_iter().map(|s| TextString::from(s)).collect();
+    let expected = CborType::Indefinite(Indefinite::TextString(expected));
+    let buf = &hex!("7f 65 7374726561 64 6d696e67 ff");
+    assert_eq!(buf.decode(), Ok(vec![CborType::from(expected)]));
+
     // string with bad UTF-8
     let bad_input = &hex!("64 fdd00000")[..];
     assert_eq!(bad_input.decode().unwrap_err(), DecodeError::Utf8Error);
@@ -229,4 +241,6 @@ fn textstring() {
     // TODO:
     // string that is truncated
     // string with a bogus adn_info field (neither <24 nor MORE1..MORE8)
+    // unterminated indefinite string
+    // indefinite string with bad substring type
 }

@@ -255,37 +255,55 @@ impl Decode for Vec<Element> {
         let mut result = Vec::new();
         let mut input = self.iter();
         loop {
-            let decoded = match input.next() {
-                None => break,
-                Some(element) => match element.major {
-                    Major::Uint => decode_uint(element),
-                    Major::Nint => decode_nint(element),
-                    Major::Bstr => {
-                        if element.adn_info == AdnInfo::INDEFINITE {
-                            // Indefinite-length byte string
-                            todo!()
-                        } else {
-                            decode_bstr(element)
-                        }
-                    }
-                    Major::Tstr => {
-                        if element.adn_info == AdnInfo::INDEFINITE {
-                            // Indefinite-length byte string
-                            todo!()
-                        } else {
-                            decode_tstr(element)
-                        }
-                    }
-                    Major::Array => todo!(),
-                    Major::Map => todo!(),
-                    Major::Tag => todo!(),
-                    Major::Misc => decode_misc(element),
-                },
-            }?;
-            result.push(decoded);
+            let decoded = decode_one(&mut input);
+            match decoded {
+                Ok(val) => result.push(val),
+                Err(DecodeError::Underrun) => {
+                    // FIXME: is this right?
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
         }
         Ok(result)
     }
+}
+
+// Decode one CborType from the input iterator.
+fn decode_one(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, DecodeError> {
+    let decoded = match input.next() {
+        None => {
+            return Err(DecodeError::Underrun);
+        }
+        Some(element) => match element.major {
+            Major::Uint => decode_uint(element),
+            Major::Nint => decode_nint(element),
+            Major::Bstr => {
+                if element.adn_info == AdnInfo::INDEFINITE {
+                    // Indefinite-length byte string
+                    // FIXME: is it possible for the element to have improper fields?
+                    // imm? bytes? either it's guaranteed to be well-formed here, or
+                    // we need extra checks?
+                    decode_bstr_indef(input)
+                } else {
+                    decode_bstr(element)
+                }
+            }
+            Major::Tstr => {
+                if element.adn_info == AdnInfo::INDEFINITE {
+                    // Indefinite-length text string
+                    decode_tstr_indef(input)
+                } else {
+                    decode_tstr(element)
+                }
+            }
+            Major::Array => todo!(),
+            Major::Map => todo!(),
+            Major::Tag => todo!(),
+            Major::Misc => decode_misc(element),
+        },
+    }?;
+    Ok(decoded)
 }
 
 fn decode_misc(element: &Element) -> Result<CborType, DecodeError> {
@@ -294,6 +312,7 @@ fn decode_misc(element: &Element) -> Result<CborType, DecodeError> {
         AdnInfo::TRUE => CborType::Bool(true),
         AdnInfo::NULL => CborType::Null,
         AdnInfo::UNDEFINED => CborType::Undefined,
+        AdnInfo::BREAK => return Err(DecodeError::Break),
         _ => todo!(),
     };
     Ok(decoded)
@@ -330,6 +349,34 @@ fn decode_bstr(element: &Element) -> Result<CborType, DecodeError> {
 fn decode_tstr(element: &Element) -> Result<CborType, DecodeError> {
     let text = String::from_utf8(element.bytes.clone()).map_err(|_| DecodeError::Utf8Error)?;
     Ok(CborType::TextString(TextString(text)))
+}
+
+fn decode_bstr_indef(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, DecodeError> {
+    // Consume a run of elements containing bstrs, terminated by a BREAK symbol.
+    let mut result: Vec<ByteString> = Vec::new();
+    loop {
+        match decode_one(input) {
+            Ok(CborType::ByteString(b)) => result.push(b),
+            Ok(_) => return Err(DecodeError::BadSubString),
+            Err(DecodeError::Break) => break,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(CborType::Indefinite(Indefinite::ByteString(result)))
+}
+
+fn decode_tstr_indef(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, DecodeError> {
+    // Consume a run of elements containing tstrs, terminated by a BREAK symbol.
+    let mut result: Vec<TextString> = Vec::new();
+    loop {
+        match decode_one(input) {
+            Ok(CborType::TextString(t)) => result.push(t),
+            Ok(_) => return Err(DecodeError::BadSubString),
+            Err(DecodeError::Break) => break,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(CborType::Indefinite(Indefinite::TextString(result)))
 }
 
 // In the future this could complete the convertion to [u8; N]
@@ -390,6 +437,7 @@ fn get_length(element: &Element) -> Result<usize, DecodeError> {
             let length: usize = length.try_into().unwrap();
             Ok(length)
         }
+        AdnInfo::INDEFINITE => Err(DecodeError::Indefinite),
         _ => Err(DecodeError::Undecodable),
     }
 }
@@ -414,13 +462,18 @@ impl DecodeSymbolic for [u8] {
                 }
                 Major::Bstr | Major::Tstr => {
                     // take 0-8 bytes for length.
-                    // FIXME: need to handle indefinite-length.
                     decode_imm(&mut element, &mut remaining)?;
-                    // read that length, take that many more bytes as payload.
-                    let length = get_length(&element)?;
-                    let (head, tail) = try_split(&mut remaining, length)?;
-                    element.bytes = head.into();
-                    remaining = tail;
+                    // if this is a definite-length encoding...
+                    // read the length, take that many more bytes as payload.
+                    match get_length(&element) {
+                        Ok(length) => {
+                            let (head, tail) = try_split(&mut remaining, length)?;
+                            element.bytes = head.into();
+                            remaining = tail;
+                        }
+                        Err(DecodeError::Indefinite) => {}
+                        Err(e) => return Err(e),
+                    }
                 }
                 Major::Array | Major::Map => {
                     // take 0-8 bytes based on adn_info

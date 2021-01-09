@@ -702,6 +702,12 @@ pub enum DecodeError {
     Utf8Error,
     /// The byte sequence cannot be decoded as CBOR data.
     Undecodable,
+    /// Improper nesting of types inside an indefinite text or byte string.
+    BadSubString,
+    /// CBOR elements were terminated by a BREAK symbol.
+    Break,
+    /// CBOR element was marked as indefinite-length.
+    Indefinite,
 }
 
 /// Binary CBOR encoding.
