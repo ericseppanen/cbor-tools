@@ -270,6 +270,10 @@ impl Decode for Vec<Element> {
 }
 
 // Decode one CborType from the input iterator.
+//
+// If the input iterator returns None, this will return Err(Underrun).
+// If the input is a BREAK, this will return Err(Break).
+// All other well-formed inputs will return a single CborType.
 fn decode_one(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, DecodeError> {
     let decoded = match input.next() {
         None => {
@@ -297,7 +301,7 @@ fn decode_one(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, Dec
                     decode_tstr(element)
                 }
             }
-            Major::Array => todo!(),
+            Major::Array => decode_array(element, input),
             Major::Map => todo!(),
             Major::Tag => todo!(),
             Major::Misc => decode_misc(element),
@@ -379,6 +383,74 @@ fn decode_tstr_indef(input: &mut std::slice::Iter<'_, Element>) -> Result<CborTy
     Ok(CborType::Indefinite(Indefinite::TextString(result)))
 }
 
+// A counter for keeping track of how many more elements we want.
+enum RunLength {
+    Indefinite,
+    Definite(usize),
+}
+
+impl RunLength {
+    // Given an element, create a RunLength counter.
+    fn get(element: &Element) -> Result<Self, DecodeError> {
+        match get_length(&element) {
+            Ok(len) => {
+                // FIXME: if this is a map, double the length?
+                // Or let the caller handle it?
+                Ok(RunLength::Definite(len))
+            }
+            Err(DecodeError::Indefinite) => Ok(RunLength::Indefinite),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            RunLength::Indefinite => false,
+            RunLength::Definite(len) => *len == 0,
+        }
+    }
+
+    fn decrement(&mut self) {
+        match self {
+            RunLength::Indefinite => {}
+            RunLength::Definite(ref mut len) => {
+                if *len == 0 {
+                    panic!("RunLength underflow");
+                }
+                *len -= 1;
+            }
+        }
+    }
+}
+
+fn decode_array(
+    element: &Element,
+    input: &mut std::slice::Iter<'_, Element>,
+) -> Result<CborType, DecodeError> {
+    let mut rlen = RunLength::get(element)?;
+    let is_indef = matches!(rlen, RunLength::Indefinite);
+    let mut result: Vec<CborType> = Vec::new();
+    while !rlen.is_zero() {
+        // Recursively decode one CborType, by traversing one or more Elements.
+        let val = decode_one(input);
+        if is_indef && matches!(val, Err(DecodeError::Break)) {
+            // This is an indefinite-length array, properly terminated.
+            break;
+        }
+        // Keep any Ok result; return any remaining error.
+        result.push(val?);
+        // Decrement the array-length counter.
+        rlen.decrement();
+    }
+
+    // rlen is now zero; return the result
+    if is_indef {
+        Ok(CborType::Indefinite(Indefinite::Array(Array::from(result))))
+    } else {
+        Ok(CborType::from(result))
+    }
+}
+
 // In the future this could complete the convertion to [u8; N]
 // using const generics.
 fn try_split(slice: &[u8], index: usize) -> Result<(&[u8], &[u8]), DecodeError> {
@@ -453,20 +525,19 @@ impl DecodeSymbolic for [u8] {
             // Convert first byte's fields into an Element
             let mut element = Element::from_byte(remaining[0]);
             remaining = &remaining[1..];
+            // take 0-8 bytes based on adn_info
+            decode_imm(&mut element, &mut remaining)?;
             // Examine the Element; based on its values, take some
             // bytes into its 'bytes' field.
             match element.major {
                 Major::Uint | Major::Nint => {
-                    // take 0-8 bytes based on adn_info
-                    decode_imm(&mut element, &mut remaining)?;
+                    // Nothing further needed here.
                 }
                 Major::Bstr | Major::Tstr => {
-                    // take 0-8 bytes for length.
-                    decode_imm(&mut element, &mut remaining)?;
-                    // if this is a definite-length encoding...
-                    // read the length, take that many more bytes as payload.
                     match get_length(&element) {
                         Ok(length) => {
+                            // This is a definite-length encoding;
+                            // take that many more bytes as payload.
                             let (head, tail) = try_split(&mut remaining, length)?;
                             element.bytes = head.into();
                             remaining = tail;
@@ -476,19 +547,16 @@ impl DecodeSymbolic for [u8] {
                     }
                 }
                 Major::Array | Major::Map => {
-                    // take 0-8 bytes based on adn_info
-                    decode_imm(&mut element, &mut remaining)?;
-                    // FIXME: need to recurse, maybe?
-                    todo!();
+                    // Nothing further needed here.
+                    // Each array or map member is its own element.
                 }
                 Major::Tag => {
-                    // take 0-8 bytes for the tag value
-                    decode_imm(&mut element, &mut remaining)?;
-                    todo!();
+                    // Nothing further needed here.
                 }
                 Major::Misc => {
-                    // take 0-8 bytes containing simple values or floats.
-                    decode_imm(&mut element, &mut remaining)?;
+                    // No further action needed for bool/null/undefined
+                    // FIXME: handle floats
+                    // FIXME: handle other weird/invalid values?
                 }
             }
             result.push(element);

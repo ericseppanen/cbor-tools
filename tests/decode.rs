@@ -244,3 +244,78 @@ fn textstring() {
     // unterminated indefinite string
     // indefinite string with bad substring type
 }
+
+// FIXME: duplicated from encode.rs
+fn make_indef_array<T>(list: Vec<T>) -> CborType
+where
+    T: Into<CborType>,
+{
+    // build a regular array struct and then cannibalize it.
+    let regular_array = CborType::from(list);
+    if let CborType::Array(a) = regular_array {
+        CborType::Indefinite(Indefinite::Array(a))
+    } else {
+        unreachable!()
+    }
+}
+
+#[test]
+fn arrays() {
+    // examples from RFC 7049
+    let empty = CborType::from(Vec::<u32>::new());
+    assert_eq!(hex!("80").decode(), Ok(vec![empty]));
+
+    let nums = CborType::from(vec![1, 2, 3]);
+    assert_eq!(hex!("83 010203").decode(), Ok(vec![nums]));
+
+    let deep = vec![
+        CborType::from(1),
+        CborType::from(vec![2, 3]),
+        CborType::from(vec![4, 5]),
+    ];
+    let def_deep = CborType::from(deep.clone());
+    assert_eq!(hex!("8301820203820405").decode(), Ok(vec![def_deep]));
+
+    let twentyfive: Vec<u32> = (1..26).into_iter().collect();
+    let def_twentyfive = CborType::from(twentyfive.clone());
+    let buf = hex!("98190102030405060708090a0b0c0d0e0f101112131415161718181819");
+    assert_eq!(buf.decode(), Ok(vec![def_twentyfive]));
+
+    let empty_indef = make_indef_array(Vec::<u32>::new());
+    assert_eq!(hex!("9fff").decode(), Ok(vec![empty_indef]));
+
+    let deep_indef = make_indef_array(deep);
+    assert_eq!(hex!("9f01820203820405ff").decode(), Ok(vec![deep_indef]));
+
+    let deep2 = vec![
+        CborType::from(1),
+        CborType::from(vec![2, 3]),
+        make_indef_array(vec![4, 5]),
+    ];
+    let deep2 = make_indef_array(deep2);
+    assert_eq!(hex!("9f018202039f0405ffff").decode(), Ok(vec![deep2]));
+
+    let deep3 = vec![
+        CborType::from(1),
+        CborType::from(vec![2, 3]),
+        make_indef_array(vec![4, 5]),
+    ];
+    let deep3 = CborType::from(deep3);
+    assert_eq!(hex!("83018202039f0405ff").decode(), Ok(vec![deep3]));
+
+    let deep4 = vec![
+        CborType::from(1),
+        make_indef_array(vec![2, 3]),
+        CborType::from(vec![4, 5]),
+    ];
+    let deep4 = CborType::from(deep4);
+    assert_eq!(hex!("83019f0203ff820405").decode(), Ok(vec![deep4]));
+
+    let indef_twentyfive = make_indef_array(twentyfive);
+    let buf = hex!("9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
+    assert_eq!(buf.decode(), Ok(vec![dbg!(indef_twentyfive)]));
+
+    // TODO:
+    // truncated array
+    // unexpected break in definite-length array
+}
