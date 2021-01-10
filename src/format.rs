@@ -1,6 +1,6 @@
 use crate::{
     Array, ByteString, CborType, Decode, DecodeError, DecodeSymbolic, Encode, EncodeSymbolic,
-    Float, Indefinite, Integer, Map, Tagged, TextString, ZeroTo23,
+    Float, Indefinite, Integer, Map, Tag, Tagged, TextString, ZeroTo23,
 };
 use half::f16;
 use num_enum::TryFromPrimitive;
@@ -303,7 +303,7 @@ fn decode_one(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, Dec
             }
             Major::Array => decode_array(element, input),
             Major::Map => decode_map(element, input),
-            Major::Tag => todo!(),
+            Major::Tag => decode_tag(element, input),
             Major::Misc => decode_misc(element),
         },
     }?;
@@ -496,6 +496,21 @@ fn decode_map(
     } else {
         Ok(CborType::from(map_pairs))
     }
+}
+
+fn decode_tag(
+    element: &Element,
+    input: &mut std::slice::Iter<'_, Element>,
+) -> Result<CborType, DecodeError> {
+    let child_value = decode_one(input)?;
+    // FIXME: are there ways the "tag" element might be malformed?
+    // FIXME: need a better approach to the usize/u64 adaptations.
+    let tag = get_length(element)? as u64;
+
+    Ok(CborType::Tagged(Tagged {
+        tag: Tag(tag),
+        child: Box::new(child_value),
+    }))
 }
 
 // In the future this could complete the convertion to [u8; N]

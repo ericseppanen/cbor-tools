@@ -1,5 +1,5 @@
 use cbor_tools::format::{AdnInfo, Element, ImmediateValue, Major};
-use cbor_tools::test_util::*;
+use cbor_tools::{test_util::*, Tag};
 use cbor_tools::{
     ByteString, CborType, Decode, DecodeError, DecodeSymbolic, Indefinite, Integer, TextString,
 };
@@ -347,4 +347,12 @@ fn maps() {
     // truncated map (odd)
     // indefinite-length map with odd number of child items
     // unexpected break in definite-length map
+}
+
+#[test]
+fn tags() {
+    // RFC 7049 2.4 (roughly)
+    let bytestring = CborType::from(&[0u8; 12][..]);
+    let tagged = CborType::Tagged(Tag::POS_BIGNUM.wrap(bytestring));
+    assert_decode(&hex!("c2 4c 000000000000000000000000"), &tagged);
 }
