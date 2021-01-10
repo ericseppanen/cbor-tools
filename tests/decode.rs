@@ -1,8 +1,10 @@
 use cbor_tools::format::{AdnInfo, Element, ImmediateValue, Major};
-use cbor_tools::{test_util::*, Tag};
+use cbor_tools::test_util::*;
 use cbor_tools::{
-    ByteString, CborType, Decode, DecodeError, DecodeSymbolic, Indefinite, Integer, TextString,
+    ByteString, CborType, Decode, DecodeError, DecodeSymbolic, Float, Indefinite, Integer, Tag,
+    TextString,
 };
+use half::f16;
 use hex_literal::hex;
 use std::convert::TryFrom;
 
@@ -138,10 +140,7 @@ fn uint() {
         hex!("1f").decode_symbolic(),
         Ok(vec![Element::simple(Major::Uint, AdnInfo::BREAK)])
     );
-    assert_eq!(
-        hex!("1f").decode(),
-        Err(DecodeError::Undecodable)
-    );
+    assert_eq!(hex!("1f").decode(), Err(DecodeError::Undecodable));
 }
 
 #[test]
@@ -388,4 +387,63 @@ fn tags() {
     let bytestring = CborType::from(&[0u8; 12][..]);
     let tagged = CborType::Tagged(Tag::POS_BIGNUM.wrap(bytestring));
     assert_decode(&hex!("c2 4c 000000000000000000000000"), &tagged);
+}
+
+#[test]
+fn floats() {
+    // examples from RFC 7049
+    assert_decode(&hex!("f9 0000"), &CborType::from(0.0));
+
+    assert_decode(&hex!("f9 8000"), &CborType::from(-0.0));
+    assert_decode(&hex!("f9 3c00"), &CborType::from(1.0));
+    assert_decode(&hex!("fb 3ff199999999999a"), &CborType::from(1.1f64));
+
+    assert_decode(&hex!("f9 3e00"), &CborType::from(1.5));
+    assert_decode(&hex!("f9 7bff"), &CborType::from(65504.0));
+    assert_decode(&hex!("fa 47c35000"), &CborType::from(100000.0));
+
+    assert_decode(
+        &hex!("fa 7f7fffff"),
+        &CborType::from(3.4028234663852886e+38),
+    );
+    assert_decode(&hex!("fb 7e37e43c8800759c"), &CborType::from(1.0e+300));
+    assert_decode(&hex!("f9 0001"), &CborType::from(5.960464477539063e-8));
+
+    assert_decode(&hex!("f9 0400"), &CborType::from(0.00006103515625));
+    assert_decode(&hex!("f9 c400"), &CborType::from(-4.0));
+    assert_decode(&hex!("fb c010666666666666"), &CborType::from(-4.1));
+
+    assert_decode(&hex!("f9 7c00"), &CborType::from(f16::INFINITY));
+    assert_decode(&hex!("f9 fc00"), &CborType::from(f16::NEG_INFINITY));
+    // CborType::from or Float::from will canonicalize infinity to f16...
+    assert_decode(
+        &hex!("fa 7f800000"),
+        &CborType::Float(Float::F32(f32::INFINITY)),
+    );
+    assert_decode(
+        &hex!("fa ff800000"),
+        &CborType::Float(Float::F32(f32::NEG_INFINITY)),
+    );
+    assert_decode(
+        &hex!("fb 7ff0000000000000"),
+        &CborType::Float(Float::F64(f64::INFINITY)),
+    );
+    assert_decode(
+        &hex!("fb fff0000000000000"),
+        &CborType::Float(Float::F64(f64::NEG_INFINITY)),
+    );
+
+    // NaNs are annoying, because they don't compare equal.
+    match hex!("f9 7e00").decode().unwrap()[0] {
+        CborType::Float(Float::F16(x)) => assert!(x.is_nan()),
+        _ => panic!("F16 NaN"),
+    }
+    match hex!("fa7fc00000").decode().unwrap()[0] {
+        CborType::Float(Float::F32(x)) => assert!(x.is_nan()),
+        _ => panic!("F32 NaN"),
+    }
+    match hex!("fb7ff8000000000000").decode().unwrap()[0] {
+        CborType::Float(Float::F64(x)) => assert!(x.is_nan()),
+        _ => panic!("F64 NaN"),
+    }
 }

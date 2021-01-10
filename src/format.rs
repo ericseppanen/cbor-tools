@@ -335,6 +335,27 @@ fn decode_misc(element: &Element) -> Result<CborType, DecodeError> {
             ImmediateValue::Bytes1([n]) => return Err(DecodeError::UnknownSimple(n)),
             _ => return Err(DecodeError::Undecodable),
         },
+        AdnInfo::FLOAT16 => {
+            if let ImmediateValue::Bytes2(b) = element.imm {
+                CborType::Float(Float::F16(f16::from_be_bytes(b)))
+            } else {
+                return Err(DecodeError::Undecodable);
+            }
+        }
+        AdnInfo::FLOAT32 => {
+            if let ImmediateValue::Bytes4(b) = element.imm {
+                CborType::Float(Float::F32(f32::from_be_bytes(b)))
+            } else {
+                return Err(DecodeError::Undecodable);
+            }
+        }
+        AdnInfo::FLOAT64 => {
+            if let ImmediateValue::Bytes8(b) = element.imm {
+                CborType::Float(Float::F64(f64::from_be_bytes(b)))
+            } else {
+                return Err(DecodeError::Undecodable);
+            }
+        }
         AdnInfo(n) => {
             // Because AdnInfo is only 5 bytes wide, this could only be 0..19
             return Err(DecodeError::UnknownSimple(n));
