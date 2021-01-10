@@ -317,7 +317,28 @@ fn decode_misc(element: &Element) -> Result<CborType, DecodeError> {
         AdnInfo::NULL => CborType::Null,
         AdnInfo::UNDEFINED => CborType::Undefined,
         AdnInfo::BREAK => return Err(DecodeError::Break),
-        _ => todo!(),
+        AdnInfo::MORE1 => match element.imm {
+            // There is a possible weird encoding here where a simple value
+            // (FALSE, TRUE, NULL, UNDEFINED) could be encoded as a 1-byte
+            // immediate value. Should those encodings be treated as legitimate?
+            // RFC 7049 3.2 says:
+            // "Even though CBOR attempts to minimize these cases, not all well-
+            // formed CBOR data is valid: for example, the format excludes simple
+            // values below 32 that are encoded with an extension byte."
+            //
+            // As of 1/2021, the CBOR simple values registry only contains those
+            // four values:
+            // https://www.iana.org/assignments/cbor-simple-values/cbor-simple-values.xhtml
+            //
+            // As this implementation does not decode unknown Simple Values,
+            // for now, we return an error.
+            ImmediateValue::Bytes1([n]) => return Err(DecodeError::UnknownSimple(n)),
+            _ => return Err(DecodeError::Undecodable),
+        },
+        AdnInfo(n) => {
+            // Because AdnInfo is only 5 bytes wide, this could only be 0..19
+            return Err(DecodeError::UnknownSimple(n));
+        }
     };
     Ok(decoded)
 }
@@ -533,8 +554,10 @@ fn decode_imm(element: &mut Element, buf: &mut &[u8]) -> Result<(), DecodeError>
 
     match element.adn_info {
         AdnInfo::MORE1 => {
-            element.imm = ImmediateValue::from(buf[0]);
-            *buf = &buf[1..];
+            let (head, tail) = try_split(*buf, 1)?;
+            let imm: [u8; 1] = head.as_ref().try_into().unwrap();
+            element.imm = ImmediateValue::Bytes1(imm);
+            *buf = tail;
         }
         AdnInfo::MORE2 => {
             let (head, tail) = try_split(*buf, 2)?;

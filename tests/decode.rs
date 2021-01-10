@@ -25,6 +25,28 @@ fn simple_values() {
     assert_simple(&hex!("F5"), AdnInfo::TRUE, CborType::Bool(true));
     assert_simple(&hex!("F6"), AdnInfo::NULL, CborType::Null);
     assert_simple(&hex!("F7"), AdnInfo::UNDEFINED, CborType::Undefined);
+
+    // This is Simple Value 16, which is unassigned.
+    // We can perform a symbolic decode, but not a full decode.
+    let symbolic = hex!("F0").decode_symbolic().unwrap();
+    assert_eq!(
+        symbolic,
+        vec![Element::simple(Major::Misc, AdnInfo::from(16))]
+    );
+    assert_eq!(symbolic.decode(), Err(DecodeError::UnknownSimple(16)));
+
+    // This is Simple Value 255, which is unassigned.
+    // We can perform a symbolic decode, but not a full decode.
+    let symbolic = hex!("F8 FF").decode_symbolic().unwrap();
+    assert_eq!(
+        symbolic,
+        vec![Element::new(
+            Major::Misc,
+            AdnInfo::MORE1,
+            ImmediateValue::from(255u8)
+        )]
+    );
+    assert_eq!(symbolic.decode(), Err(DecodeError::UnknownSimple(255)));
 }
 
 #[test]

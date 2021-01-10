@@ -712,6 +712,8 @@ pub enum DecodeError {
     Indefinite,
     /// A Map didn't have an even number of members.
     MapPairError,
+    /// An unknown Simple Value was encountered.
+    UnknownSimple(u8),
 }
 
 /// Binary CBOR encoding.
