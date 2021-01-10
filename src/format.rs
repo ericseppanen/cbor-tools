@@ -350,7 +350,7 @@ fn decode_uint(element: &Element) -> Result<CborType, DecodeError> {
         (AdnInfo::MORE2, ImmediateValue::Bytes2(b)) => Integer::U16(u16::from_be_bytes(b)),
         (AdnInfo::MORE4, ImmediateValue::Bytes4(b)) => Integer::U32(u32::from_be_bytes(b)),
         (AdnInfo::MORE8, ImmediateValue::Bytes8(b)) => Integer::U64(u64::from_be_bytes(b)),
-        _ => panic!("nonsensical uint element"),
+        _ => return Err(DecodeError::Undecodable),
     };
     Ok(decoded.into())
 }
@@ -362,7 +362,7 @@ fn decode_nint(element: &Element) -> Result<CborType, DecodeError> {
         (AdnInfo::MORE2, ImmediateValue::Bytes2(b)) => Integer::N16(u16::from_be_bytes(b)),
         (AdnInfo::MORE4, ImmediateValue::Bytes4(b)) => Integer::N32(u32::from_be_bytes(b)),
         (AdnInfo::MORE8, ImmediateValue::Bytes8(b)) => Integer::N64(u64::from_be_bytes(b)),
-        _ => panic!("nonsensical uint element"),
+        _ => return Err(DecodeError::Undecodable),
     };
     Ok(decoded.into())
 }

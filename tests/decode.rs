@@ -131,6 +131,17 @@ fn uint() {
     assert_u32(&hex!("1a 000f 4240"), 1000000);
     assert_u64(&hex!("1b 0000 00e8 d4a5 1000"), 1000000000000);
     assert_u64(&hex!("1b ffff ffff ffff ffff"), 18446744073709551615);
+
+    // Not well-formed values:
+    // An integer with "additional information = 31"
+    assert_eq!(
+        hex!("1f").decode_symbolic(),
+        Ok(vec![Element::simple(Major::Uint, AdnInfo::BREAK)])
+    );
+    assert_eq!(
+        hex!("1f").decode(),
+        Err(DecodeError::Undecodable)
+    );
 }
 
 #[test]
