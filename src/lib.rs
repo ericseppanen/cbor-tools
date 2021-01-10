@@ -63,6 +63,8 @@ use std::{convert::TryFrom, ops::Deref};
 
 /// Specifies the exact binary format of CBOR data.
 pub mod format;
+#[doc(hidden)]
+pub mod test_util;
 
 /// CBOR Integer type
 ///
@@ -708,6 +710,8 @@ pub enum DecodeError {
     Break,
     /// CBOR element was marked as indefinite-length.
     Indefinite,
+    /// A Map didn't have an even number of members.
+    MapPairError,
 }
 
 /// Binary CBOR encoding.

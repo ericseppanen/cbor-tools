@@ -1,3 +1,4 @@
+use cbor_tools::test_util::*;
 use cbor_tools::{ByteString, CborType, Encode, Float, Indefinite, Integer, Tag, TextString};
 use half::f16;
 use hex_literal::hex;
@@ -211,19 +212,6 @@ fn int_debug() {
     assert_eq!(s, "Integer { N64: -18446744073709551615 }");
 }
 
-fn make_indef_array<T>(list: Vec<T>) -> CborType
-where
-    T: Into<CborType>,
-{
-    // build a regular array struct and then cannibalize it.
-    let regular_array = CborType::from(list);
-    if let CborType::Array(a) = regular_array {
-        CborType::Indefinite(Indefinite::Array(a))
-    } else {
-        unreachable!()
-    }
-}
-
 #[test]
 fn arrays() {
     // examples from RFC 7049
@@ -276,20 +264,6 @@ fn arrays() {
 
     let expected = hex!("9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
     assert_eq!(make_indef_array(twentyfive).encode(), expected);
-}
-
-fn make_indef_map<K, V>(list: Vec<(K, V)>) -> CborType
-where
-    K: Into<CborType>,
-    V: Into<CborType>,
-{
-    // build a regular map struct and then cannibalize it.
-    let regular_map = CborType::from(list);
-    if let CborType::Map(m) = regular_map {
-        CborType::Indefinite(Indefinite::Map(m))
-    } else {
-        unreachable!()
-    }
 }
 
 #[test]

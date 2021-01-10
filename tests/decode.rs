@@ -1,9 +1,17 @@
 use cbor_tools::format::{AdnInfo, Element, ImmediateValue, Major};
+use cbor_tools::test_util::*;
 use cbor_tools::{
     ByteString, CborType, Decode, DecodeError, DecodeSymbolic, Indefinite, Integer, TextString,
 };
 use hex_literal::hex;
 use std::convert::TryFrom;
+
+#[track_caller]
+fn assert_decode(buf: &[u8], expected: &CborType) {
+    let decoded = buf.decode().unwrap();
+    assert!(decoded.len() == 1);
+    assert_eq!(decoded[0], *expected);
+}
 
 #[test]
 fn simple_values() {
@@ -245,28 +253,14 @@ fn textstring() {
     // indefinite string with bad substring type
 }
 
-// FIXME: duplicated from encode.rs
-fn make_indef_array<T>(list: Vec<T>) -> CborType
-where
-    T: Into<CborType>,
-{
-    // build a regular array struct and then cannibalize it.
-    let regular_array = CborType::from(list);
-    if let CborType::Array(a) = regular_array {
-        CborType::Indefinite(Indefinite::Array(a))
-    } else {
-        unreachable!()
-    }
-}
-
 #[test]
 fn arrays() {
     // examples from RFC 7049
     let empty = CborType::from(Vec::<u32>::new());
-    assert_eq!(hex!("80").decode(), Ok(vec![empty]));
+    assert_decode(&hex!("80"), &empty);
 
     let nums = CborType::from(vec![1, 2, 3]);
-    assert_eq!(hex!("83 010203").decode(), Ok(vec![nums]));
+    assert_decode(&hex!("83 010203"), &nums);
 
     let deep = vec![
         CborType::from(1),
@@ -274,18 +268,18 @@ fn arrays() {
         CborType::from(vec![4, 5]),
     ];
     let def_deep = CborType::from(deep.clone());
-    assert_eq!(hex!("8301820203820405").decode(), Ok(vec![def_deep]));
+    assert_decode(&hex!("8301820203820405"), &def_deep);
 
     let twentyfive: Vec<u32> = (1..26).into_iter().collect();
     let def_twentyfive = CborType::from(twentyfive.clone());
     let buf = hex!("98190102030405060708090a0b0c0d0e0f101112131415161718181819");
-    assert_eq!(buf.decode(), Ok(vec![def_twentyfive]));
+    assert_decode(&buf, &def_twentyfive);
 
     let empty_indef = make_indef_array(Vec::<u32>::new());
-    assert_eq!(hex!("9fff").decode(), Ok(vec![empty_indef]));
+    assert_decode(&hex!("9fff"), &empty_indef);
 
     let deep_indef = make_indef_array(deep);
-    assert_eq!(hex!("9f01820203820405ff").decode(), Ok(vec![deep_indef]));
+    assert_decode(&hex!("9f01820203820405ff"), &deep_indef);
 
     let deep2 = vec![
         CborType::from(1),
@@ -293,7 +287,7 @@ fn arrays() {
         make_indef_array(vec![4, 5]),
     ];
     let deep2 = make_indef_array(deep2);
-    assert_eq!(hex!("9f018202039f0405ffff").decode(), Ok(vec![deep2]));
+    assert_decode(&hex!("9f018202039f0405ffff"), &deep2);
 
     let deep3 = vec![
         CborType::from(1),
@@ -301,7 +295,7 @@ fn arrays() {
         make_indef_array(vec![4, 5]),
     ];
     let deep3 = CborType::from(deep3);
-    assert_eq!(hex!("83018202039f0405ff").decode(), Ok(vec![deep3]));
+    assert_decode(&hex!("83018202039f0405ff"), &deep3);
 
     let deep4 = vec![
         CborType::from(1),
@@ -309,13 +303,48 @@ fn arrays() {
         CborType::from(vec![4, 5]),
     ];
     let deep4 = CborType::from(deep4);
-    assert_eq!(hex!("83019f0203ff820405").decode(), Ok(vec![deep4]));
+    assert_decode(&hex!("83019f0203ff820405"), &deep4);
 
     let indef_twentyfive = make_indef_array(twentyfive);
     let buf = hex!("9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
-    assert_eq!(buf.decode(), Ok(vec![dbg!(indef_twentyfive)]));
+    assert_decode(&buf, &indef_twentyfive);
 
     // TODO:
     // truncated array
     // unexpected break in definite-length array
+}
+
+#[test]
+fn maps() {
+    // examples from RFC 7049
+    let empty = Vec::<(i8, i8)>::new();
+    let empty = CborType::from(empty);
+    assert_decode(&hex!("a0"), &empty);
+
+    let kv = CborType::from(vec![(1, 2), (3, 4)]);
+    assert_decode(&hex!("a2 0102 0304"), &kv);
+
+    let kv = vec![
+        (CborType::from("a"), CborType::from(1)),
+        (CborType::from("b"), CborType::from(vec![2, 3])),
+    ];
+    let kv = CborType::from(kv);
+    assert_decode(&hex!("a2 6161 01 6162 820203"), &kv);
+
+    let kv = vec![("a", "A"), ("b", "B"), ("c", "C"), ("d", "D"), ("e", "E")];
+    let kv = CborType::from(kv);
+    assert_decode(&hex!("a56161614161626142616361436164614461656145"), &kv);
+
+    let kv = vec![
+        (CborType::from("a"), CborType::from(1)),
+        (CborType::from("b"), make_indef_array(vec![2, 3])),
+    ];
+    let kv = make_indef_map(kv);
+    assert_decode(&hex!("bf61610161629f0203ffff"), &kv);
+
+    // TODO:
+    // truncated map (even)
+    // truncated map (odd)
+    // indefinite-length map with odd number of child items
+    // unexpected break in definite-length map
 }

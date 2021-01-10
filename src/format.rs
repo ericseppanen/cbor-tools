@@ -302,7 +302,7 @@ fn decode_one(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, Dec
                 }
             }
             Major::Array => decode_array(element, input),
-            Major::Map => todo!(),
+            Major::Map => decode_map(element, input),
             Major::Tag => todo!(),
             Major::Misc => decode_misc(element),
         },
@@ -448,6 +448,53 @@ fn decode_array(
         Ok(CborType::Indefinite(Indefinite::Array(Array::from(result))))
     } else {
         Ok(CborType::from(result))
+    }
+}
+
+fn decode_map(
+    element: &Element,
+    input: &mut std::slice::Iter<'_, Element>,
+) -> Result<CborType, DecodeError> {
+    let rlen = RunLength::get(element)?;
+
+    // Maps consume 2n items, so double the length.
+    let mut rlen = match rlen {
+        RunLength::Indefinite => rlen,
+        RunLength::Definite(n) => RunLength::Definite(2 * n),
+    };
+
+    let is_indef = matches!(rlen, RunLength::Indefinite);
+    let mut result: Vec<CborType> = Vec::new();
+    while !rlen.is_zero() {
+        // Recursively decode one CborType, by traversing one or more Elements.
+        let val = decode_one(input);
+        if is_indef && matches!(val, Err(DecodeError::Break)) {
+            // This is an indefinite-length map, properly terminated.
+            break;
+        }
+        // Keep any Ok result; return any remaining error.
+        result.push(val?);
+        // Decrement the map-length counter.
+        rlen.decrement();
+    }
+    // rlen is now zero; return the result
+
+    // convert the result to a Vec of (key, value) pairs.
+    let mut results = result.drain(..);
+    let mut map_pairs = Vec::new();
+    loop {
+        let kv_pair = (results.next(), results.next());
+        match kv_pair {
+            (Some(k), Some(v)) => map_pairs.push((k, v)),
+            (None, None) => break,
+            _ => return Err(DecodeError::MapPairError),
+        }
+    }
+
+    if is_indef {
+        Ok(CborType::Indefinite(Indefinite::Map(Map::from(map_pairs))))
+    } else {
+        Ok(CborType::from(map_pairs))
     }
 }
 
