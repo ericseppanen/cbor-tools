@@ -248,6 +248,24 @@ impl Element {
             bytes: Vec::new(),
         }
     }
+
+    /// Extract a length value from the `Element`.
+    ///
+    /// In many elements, the `adn_info` and `imm` fields encode a length parameter.
+    /// This function attempts to extract that value.
+    /// If the adn_info is not a value between 0 and 27, it will return an error.
+    pub fn get_length(&self) -> Result<usize, DecodeError> {
+        match self.adn_info {
+            AdnInfo(n) if n < 24 => Ok(n as usize),
+            AdnInfo::MORE1 | AdnInfo::MORE2 | AdnInfo::MORE4 | AdnInfo::MORE8 => {
+                let length: u64 = self.imm.into();
+                let length: usize = length.try_into().unwrap();
+                Ok(length)
+            }
+            AdnInfo::INDEFINITE => Err(DecodeError::Indefinite),
+            _ => Err(DecodeError::Undecodable),
+        }
+    }
 }
 
 impl Decode for Vec<Element> {
@@ -434,7 +452,7 @@ enum RunLength {
 impl RunLength {
     // Given an element, create a RunLength counter.
     fn get(element: &Element) -> Result<Self, DecodeError> {
-        match get_length(&element) {
+        match element.get_length() {
             Ok(len) => {
                 // FIXME: if this is a map, double the length?
                 // Or let the caller handle it?
@@ -547,7 +565,7 @@ fn decode_tag(
     let child_value = decode_one(input)?;
     // FIXME: are there ways the "tag" element might be malformed?
     // FIXME: need a better approach to the usize/u64 adaptations.
-    let tag = get_length(element)? as u64;
+    let tag = element.get_length()? as u64;
 
     Ok(CborType::Tagged(Tagged {
         tag: Tag(tag),
@@ -607,19 +625,6 @@ fn decode_imm(element: &mut Element, buf: &mut &[u8]) -> Result<(), DecodeError>
     Ok(())
 }
 
-fn get_length(element: &Element) -> Result<usize, DecodeError> {
-    match element.adn_info {
-        AdnInfo(n) if n < 24 => Ok(n as usize),
-        AdnInfo::MORE1 | AdnInfo::MORE2 | AdnInfo::MORE4 | AdnInfo::MORE8 => {
-            let length: u64 = element.imm.into();
-            let length: usize = length.try_into().unwrap();
-            Ok(length)
-        }
-        AdnInfo::INDEFINITE => Err(DecodeError::Indefinite),
-        _ => Err(DecodeError::Undecodable),
-    }
-}
-
 impl DecodeSymbolic for [u8] {
     fn decode_symbolic(&self) -> Result<Vec<Element>, DecodeError> {
         let mut remaining = &self[..];
@@ -640,7 +645,7 @@ impl DecodeSymbolic for [u8] {
                     // Nothing further needed here.
                 }
                 Major::Bstr | Major::Tstr => {
-                    match get_length(&element) {
+                    match element.get_length() {
                         Ok(length) => {
                             // This is a definite-length encoding;
                             // take that many more bytes as payload.

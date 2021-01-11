@@ -220,13 +220,17 @@ fn nint() {
     assert_n64(&hex!("3b ffff ffff ffff ffff"), -1_i128 << 64);
 }
 
+#[track_caller]
+fn assert_length(element: &Element, expected_len: usize) {
+    assert_eq!(element.get_length(), Ok(expected_len));
+}
+
 #[test]
 fn bytestring() {
     #[track_caller]
     fn assert_bytestring(buf: &[u8], expected: &[u8]) {
         let symbolic = buf.decode_symbolic().unwrap();
-        // TODO: assert correct length in adn_info + imm.
-        //assert_eq!(symbolic, vec![Element::simple(Major::Bstr, ...)]);
+        assert_length(&symbolic[0], expected.len());
         assert_eq!(symbolic.decode(), Ok(vec![CborType::from(expected)]));
     }
 
@@ -252,9 +256,7 @@ fn textstring() {
     #[track_caller]
     fn assert_textstring(buf: &[u8], expected: &str) {
         let symbolic = buf.decode_symbolic().unwrap();
-        // TODO: assert correct length in adn_info + imm.
-        //assert_eq!(symbolic, vec![Element::simple(Major::Tstr, ...)]);
-
+        assert_length(&symbolic[0], expected.len());
         assert_eq!(symbolic.decode(), Ok(vec![CborType::from(expected)]));
     }
 
