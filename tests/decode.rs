@@ -403,9 +403,11 @@ fn arrays() {
     let buf = hex!("9f0102030405060708090a0b0c0d0e0f101112131415161718181819ff");
     assert_decode(&buf, &indef_twentyfive);
 
-    // TODO:
     // truncated array
+    assert_eq!(hex!("83 0102").decode(), Err(DecodeError::Underrun));
+
     // unexpected break in definite-length array
+    assert_eq!(hex!("83 0102 FF").decode(), Err(DecodeError::Break));
 }
 
 #[test]
@@ -436,11 +438,17 @@ fn maps() {
     let kv = make_indef_map(kv);
     assert_decode(&hex!("bf61610161629f0203ffff"), &kv);
 
-    // TODO:
     // truncated map (even)
+    assert_eq!(hex!("a2 0102").decode(), Err(DecodeError::Underrun));
     // truncated map (odd)
+    assert_eq!(hex!("a2 010203").decode(), Err(DecodeError::Underrun));
     // indefinite-length map with odd number of child items
+    assert_eq!(
+        hex!("bf 010203 ff").decode(),
+        Err(DecodeError::MapPairError)
+    );
     // unexpected break in definite-length map
+    assert_eq!(hex!("a2 0102 ff").decode(), Err(DecodeError::Break));
 }
 
 #[test]
@@ -449,6 +457,9 @@ fn tags() {
     let bytestring = CborType::from(&[0u8; 12][..]);
     let tagged = CborType::Tagged(Tag::POS_BIGNUM.wrap(bytestring));
     assert_decode(&hex!("c2 4c 000000000000000000000000"), &tagged);
+
+    // tag with no payload
+    assert_eq!(hex!("c2").decode(), Err(DecodeError::Underrun));
 }
 
 #[test]
