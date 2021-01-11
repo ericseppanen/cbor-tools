@@ -276,8 +276,9 @@ impl Decode for Vec<Element> {
             let decoded = decode_one(&mut input);
             match decoded {
                 Ok(val) => result.push(val),
-                Err(DecodeError::Underrun) => {
-                    // FIXME: is this right?
+                Err(DecodeError::End) => {
+                    // At this, the topmost level of decoding, reaching the end of the input
+                    // data is not an error. We're just done.
                     break;
                 }
                 Err(e) => return Err(e),
@@ -287,15 +288,33 @@ impl Decode for Vec<Element> {
     }
 }
 
+// Decode one CborType from the input iterator, with special error handling.
+//
+// If we reach the end of the input data, return Err(Underrun) instead of Err(End).
+// Otherwise, it behaves exactly the same as decode_one.
+//
+// Reason:
+// End errors will be thrown away at the top-level decode function;
+// hitting the end of the input data at other points should be a hard error.
+// So we convert it to a different error that will propagate.
+fn require_one(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, DecodeError> {
+    let decoded = decode_one(input);
+    match decoded {
+        Err(DecodeError::End) => Err(DecodeError::Underrun),
+        x => x,
+    }
+
+}
+
 // Decode one CborType from the input iterator.
 //
-// If the input iterator returns None, this will return Err(Underrun).
+// If the input iterator returns None, this will return Err(End).
 // If the input is a BREAK, this will return Err(Break).
 // All other well-formed inputs will return a single CborType.
 fn decode_one(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, DecodeError> {
     let decoded = match input.next() {
         None => {
-            return Err(DecodeError::Underrun);
+            return Err(DecodeError::End);
         }
         Some(element) => match element.major {
             Major::Uint => decode_uint(element),
@@ -419,7 +438,7 @@ fn decode_bstr_indef(input: &mut std::slice::Iter<'_, Element>) -> Result<CborTy
     // Consume a run of elements containing bstrs, terminated by a BREAK symbol.
     let mut result: Vec<ByteString> = Vec::new();
     loop {
-        match decode_one(input) {
+        match require_one(input) {
             Ok(CborType::ByteString(b)) => result.push(b),
             Ok(_) => return Err(DecodeError::BadSubString),
             Err(DecodeError::Break) => break,
@@ -433,7 +452,7 @@ fn decode_tstr_indef(input: &mut std::slice::Iter<'_, Element>) -> Result<CborTy
     // Consume a run of elements containing tstrs, terminated by a BREAK symbol.
     let mut result: Vec<TextString> = Vec::new();
     loop {
-        match decode_one(input) {
+        match require_one(input) {
             Ok(CborType::TextString(t)) => result.push(t),
             Ok(_) => return Err(DecodeError::BadSubString),
             Err(DecodeError::Break) => break,
@@ -492,7 +511,7 @@ fn decode_array(
     let mut result: Vec<CborType> = Vec::new();
     while !rlen.is_zero() {
         // Recursively decode one CborType, by traversing one or more Elements.
-        let val = decode_one(input);
+        let val = require_one(input);
         if is_indef && matches!(val, Err(DecodeError::Break)) {
             // This is an indefinite-length array, properly terminated.
             break;
@@ -527,7 +546,7 @@ fn decode_map(
     let mut result: Vec<CborType> = Vec::new();
     while !rlen.is_zero() {
         // Recursively decode one CborType, by traversing one or more Elements.
-        let val = decode_one(input);
+        let val = require_one(input);
         if is_indef && matches!(val, Err(DecodeError::Break)) {
             // This is an indefinite-length map, properly terminated.
             break;
@@ -562,7 +581,7 @@ fn decode_tag(
     element: &Element,
     input: &mut std::slice::Iter<'_, Element>,
 ) -> Result<CborType, DecodeError> {
-    let child_value = decode_one(input)?;
+    let child_value = require_one(input)?;
     // FIXME: are there ways the "tag" element might be malformed?
     // FIXME: need a better approach to the usize/u64 adaptations.
     let tag = element.get_length()? as u64;

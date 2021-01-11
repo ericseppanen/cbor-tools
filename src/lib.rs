@@ -698,6 +698,8 @@ pub trait EncodeSymbolic {
 /// An error that may occur when decoding CBOR Data.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DecodeError {
+    /// No more CBOR items are available in the input data.
+    End,
     /// Not enough bytes were available to complete decoding.
     Underrun,
     /// A CBOR text string contains invalid UTF-8 data.

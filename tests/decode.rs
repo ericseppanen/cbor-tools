@@ -244,10 +244,33 @@ fn bytestring() {
     let buf = &hex!("5f 42 0102 43 030405 ff");
     assert_eq!(buf.decode(), Ok(vec![CborType::from(expected)]));
 
-    // TODO:
-    // bytestring that is truncated
+    // A bytestring that is truncated
+    assert_eq!(
+        hex!("44010203").decode_symbolic(),
+        Err(DecodeError::Underrun)
+    );
+    assert_eq!(hex!("44010203").decode(), Err(DecodeError::Underrun));
+
     // bytestring with a bogus adn_info field (neither <24 nor MORE1..MORE8)
-    // unterminated indefinite string
+    assert_eq!(
+        hex!("5c01020304").decode_symbolic(),
+        Err(DecodeError::Undecodable)
+    );
+    assert_eq!(hex!("5c01020304").decode(), Err(DecodeError::Undecodable));
+
+    // Unterminated indefinite string can be decoded to symbols.
+    assert_eq!(
+        hex!("5f 42 0102").decode_symbolic(),
+        Ok(vec![Element::simple(Major::Bstr, AdnInfo::INDEFINITE), {
+            let mut element = Element::simple(Major::Bstr, AdnInfo::from(2));
+            element.set_bytes(&[1, 2]);
+            element
+        }])
+    );
+    // Unterminated indefinite string can't be fully decoded.
+    assert_eq!(hex!("5f 42 0102").decode(), Err(DecodeError::Underrun));
+
+    // TODO:
     // indefinite string with bad substring type
 }
 
