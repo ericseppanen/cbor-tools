@@ -303,7 +303,6 @@ fn require_one(input: &mut std::slice::Iter<'_, Element>) -> Result<CborType, De
         Err(DecodeError::End) => Err(DecodeError::Underrun),
         x => x,
     }
-
 }
 
 // Decode one CborType from the input iterator.

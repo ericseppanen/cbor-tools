@@ -270,8 +270,11 @@ fn bytestring() {
     // Unterminated indefinite string can't be fully decoded.
     assert_eq!(hex!("5f 42 0102").decode(), Err(DecodeError::Underrun));
 
-    // TODO:
-    // indefinite string with bad substring type
+    // Indefinite-length string with an element that's not a bytestring
+    assert_eq!(
+        hex!("5f 62 2020 ff").decode(),
+        Err(DecodeError::BadSubString)
+    );
 }
 
 #[test]
@@ -304,10 +307,44 @@ fn textstring() {
     assert_eq!(bad_input.decode().unwrap_err(), DecodeError::Utf8Error);
 
     // TODO:
-    // string that is truncated
     // string with a bogus adn_info field (neither <24 nor MORE1..MORE8)
     // unterminated indefinite string
     // indefinite string with bad substring type
+
+    // A text string that is truncated
+    assert_eq!(
+        hex!("64202020").decode_symbolic(),
+        Err(DecodeError::Underrun)
+    );
+    assert_eq!(hex!("64202020").decode(), Err(DecodeError::Underrun));
+
+    // A text string with a bogus adn_info field (neither <24 nor MORE1..MORE8)
+    assert_eq!(
+        hex!("7c20202020").decode_symbolic(),
+        Err(DecodeError::Undecodable)
+    );
+    assert_eq!(hex!("7c20202020").decode(), Err(DecodeError::Undecodable));
+
+    // Unterminated indefinite string can be decoded to symbols.
+    assert_eq!(
+        hex!("7f 65 7374726561").decode_symbolic(),
+        Ok(vec![Element::simple(Major::Tstr, AdnInfo::INDEFINITE), {
+            let mut element = Element::simple(Major::Tstr, AdnInfo::from(5));
+            element.set_bytes(b"strea");
+            element
+        }])
+    );
+    // Unterminated indefinite string can't be fully decoded.
+    assert_eq!(
+        hex!("7f 65 7374726561").decode(),
+        Err(DecodeError::Underrun)
+    );
+
+    // Indefinite-length string with an element that's not a textstring
+    assert_eq!(
+        hex!("7f 42 2020 ff").decode(),
+        Err(DecodeError::BadSubString)
+    );
 }
 
 #[test]
