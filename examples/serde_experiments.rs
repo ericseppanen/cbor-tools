@@ -4,14 +4,15 @@
 //! difference is lost).
 //!
 
-use cbor_tools::{Array, CborType, Encode, EncodeSymbolic, Indefinite, TextString};
+use cbor_tools::{Array, CborType, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite, TextString};
+use serde::Serialize;
 
 fn decode_print(bytes: &[u8]) -> String {
     let decoded: serde_cbor::Value = serde_cbor::from_slice(bytes).unwrap();
     format!("{:?}", decoded)
 }
 
-fn main() {
+fn decode_with_serde_cbor() {
     // A regular array
     let array1 = CborType::from(vec![1, 2]).encode();
     println!("array1: {}", decode_print(&array1));
@@ -45,4 +46,30 @@ fn main() {
 
     // This shouldn't decode properly;
     println!("string3: {:#?}", decode_print(&string3));
+}
+
+#[derive(Serialize)]
+struct Struct1 {
+    name: String,
+    id: u32,
+}
+
+fn examine_serde_encode() {
+    let my_struct1 = Struct1 {
+        name: "Alice".into(),
+        id: 1234,
+    };
+    let encoded = serde_cbor::to_vec(&my_struct1).unwrap();
+
+    println!("my_struct1 encoded: {}", hex_fmt::HexFmt(&encoded));
+    // perform a partial decode to show the encoding details.
+    println!("my_struct1 symbols:");
+    for element in encoded.decode_symbolic().unwrap() {
+        println!("   {}", element);
+    }
+}
+
+fn main() {
+    decode_with_serde_cbor();
+    examine_serde_encode();
 }

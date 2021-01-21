@@ -6,6 +6,8 @@ use half::f16;
 use num_enum::TryFromPrimitive;
 use std::convert::TryFrom;
 use std::convert::TryInto;
+#[cfg(feature = "display")]
+use strum_macros::AsRefStr;
 
 /// The major number in a CBOR encoding
 ///
@@ -13,6 +15,7 @@ use std::convert::TryInto;
 /// type of a CBOR-encoded value.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
+#[cfg_attr(feature = "display", derive(AsRefStr))]
 pub enum Major {
     /// An unsigned integer
     Uint = 0,
@@ -39,7 +42,7 @@ pub enum Major {
 /// simple values (True, False, Null) or specify how many bytes
 /// are to follow.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct AdnInfo(u8);
+pub struct AdnInfo(pub(crate) u8);
 
 #[allow(missing_docs)]
 impl AdnInfo {
@@ -198,11 +201,11 @@ const AS_INDEF: UseDefLen = UseDefLen(false);
 #[derive(Clone, Debug, PartialEq)]
 pub struct Element {
     // The major number.
-    major: Major,
+    pub(crate) major: Major,
     // The "additional information" field.
-    adn_info: AdnInfo,
-    imm: ImmediateValue,
-    bytes: Vec<u8>,
+    pub(crate) adn_info: AdnInfo,
+    pub(crate) imm: ImmediateValue,
+    pub(crate) bytes: Vec<u8>,
 }
 
 impl Element {

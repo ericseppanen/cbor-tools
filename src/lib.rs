@@ -66,6 +66,9 @@ pub mod format;
 #[doc(hidden)]
 pub mod test_util;
 
+#[cfg(feature = "display")]
+mod display;
+
 /// CBOR Integer type
 ///
 /// ```
