@@ -4,7 +4,9 @@
 //! difference is lost).
 //!
 
-use cbor_tools::{Array, CborType, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite, TextString};
+use cbor_tools::{
+    Array, CborType, Decode, DecodeSymbolic, Encode, EncodeSymbolic, Indefinite, TextString,
+};
 use serde::Serialize;
 
 fn decode_print(bytes: &[u8]) -> String {
@@ -67,6 +69,7 @@ fn examine_serde_encode() {
     for element in encoded.decode_symbolic().unwrap() {
         println!("   {}", element);
     }
+    println!("my_struct1 decoded: {:#?}", encoded.decode());
 }
 
 fn main() {
