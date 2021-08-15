@@ -8,16 +8,17 @@
 //! - Arbitrary-length UTF-8 text strings
 //! - Arbitrary-length bytestrings
 //!
-//! Other crates provide `serde` serialization and deserialization of
-//! native Rust data structures.
+//! Other crates (i.e. `serde_cbor`) provide `serde` serialization and
+//! deserialization of native Rust data structures.
 //!
-//! This crate provides tools for constructing CBOR with fine-grained
-//! control, including:
+//! This crate provides tools for constructing and deconstructing CBOR
+//! with fine-grained control, including:
 //! - indefinite-length encoding
 //! - non-canonical encoding of integers
 //! - tagged types
 //! - sequences that may fail in strict-mode decoders
 //! - malformed sequences (for testing decoders, perhaps)
+//! - `Display` of low-level CBOR-encoded data
 //!
 //! To encode some data in CBOR, create one or more [`CborType`] values,
 //! and then call [`encode()`] on them:
@@ -48,6 +49,14 @@
 //! // cbor_bytes is a Vec<u8>
 //! # assert_eq!(cbor_bytes, [0x82, 0x63, 0x61, 0x62, 0x63, 0x18, 0x7b]);
 //! ```
+//!
+//! Decoding of arbitrary CBOR data can be performed using the [`Decode`]
+//! trait.
+//!
+//! To examine the low-level details of CBOR-encoded data, use the
+//! [`DecodeSymbolic`] trait, which optionally implements `Display`
+//! (if the `display`) feature is enabled.
+//!
 //!
 //! [RFC7049]: https://tools.ietf.org/html/rfc7049
 //! [`encode()`]: Encode::encode

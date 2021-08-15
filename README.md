@@ -6,3 +6,7 @@ It allows encoding arbitrary CBOR sequences, including:
 - tagged types
 - sequences that may fail in strict-mode decoders
 - malformed sequences (for testing decoders, perhaps)
+
+It also allows decoding all valid (and many invalid) CBOR byte sequences,
+including those that may not correspond to a valid data structure or can't
+be handled by `serde`.
