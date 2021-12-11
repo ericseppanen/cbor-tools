@@ -1,6 +1,6 @@
 [package]
 name = "cbor-tools"
-version = "0.2.0"
+version = "0.3.0"
 description = "Tools for encoding and decoding CBOR"
 authors = ["Eric Seppanen <eds@reric.net>"]
 repository = "https://github.com/ericseppanen/cbor-tools"
