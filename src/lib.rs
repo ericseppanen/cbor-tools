@@ -55,7 +55,7 @@
 //!
 //! To examine the low-level details of CBOR-encoded data, use the
 //! [`DecodeSymbolic`] trait, which optionally implements `Display`
-//! (if the `display`) feature is enabled.
+//! if the `display` feature is enabled.
 //!
 //!
 //! [RFC7049]: https://tools.ietf.org/html/rfc7049
@@ -546,7 +546,7 @@ pub struct Tagged {
     child: Box<CborType>,
 }
 
-/// A tag value for use with [`Tagged`]
+/// A tag value for use with [`Tagged`].
 ///
 /// Tags are just integers; this type exists to avoid any
 /// type confusion when passing them as function arguments.
