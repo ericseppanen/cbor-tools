@@ -71,7 +71,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::{convert::TryFrom, ops::Deref};
 
-use crate::truncate::{Truncate, TruncateFrom};
+use truncate_integer::{Chop, ChopFrom};
 
 #[cfg(feature = "display")]
 mod display;
@@ -79,7 +79,6 @@ mod display;
 pub mod format;
 #[doc(hidden)]
 pub mod test_util;
-mod truncate;
 
 /// CBOR Integer type
 ///
@@ -190,41 +189,19 @@ impl fmt::Debug for Integer {
 #[derive(Copy, Clone, PartialEq)]
 pub struct ZeroTo23(u8);
 
-impl From<u8> for ZeroTo23 {
-    /// Create a new ZeroTo23.
-    ///
-    /// Will panic if the input is outside the expected range.
-    fn from(x: u8) -> Self {
-        if x >= 24 {
-            panic!("too big for ZeroTo23::new()");
-        }
-        ZeroTo23(x)
-    }
-}
-
-impl From<i8> for ZeroTo23 {
-    /// Create a new ZeroTo23.
-    ///
-    /// Will panic if the input is outside the expected range.
-    fn from(x: i8) -> Self {
-        let x: u8 = x.try_into().unwrap();
-        if x >= 24 {
-            panic!("too big for ZeroTo23::new()");
-        }
-        ZeroTo23(x)
-    }
-}
-
-impl<I> From<I> for ZeroTo23
+impl<T> From<T> for ZeroTo23
 where
-    I: Truncate<u8>,
+    T: Into<i128>,
 {
     /// Create a new ZeroTo23.
     ///
     /// Will panic if the input is outside the expected range.
-    fn from(x: I) -> Self {
-        let x: u8 = x.truncate();
-        ZeroTo23::from(x)
+    fn from(x: T) -> Self {
+        let x: i128 = x.into();
+        if x >= 24 {
+            panic!("too big for ZeroTo23::new()");
+        }
+        ZeroTo23(x.chop())
     }
 }
 
@@ -257,7 +234,7 @@ impl From<u16> for Integer {
         if x < 24 {
             Integer::U5(ZeroTo23::from(x))
         } else if x < 0x100 {
-            Integer::from(x.truncate())
+            Integer::U8(x.chop())
         } else {
             Integer::U16(x)
         }
@@ -269,9 +246,9 @@ impl From<u32> for Integer {
         if x < 24 {
             Integer::U5(ZeroTo23::from(x))
         } else if x < 0x100 {
-            Integer::U8(x.truncate())
+            Integer::U8(x.chop())
         } else if x < 0x10000 {
-            Integer::U16(x.truncate())
+            Integer::U16(x.chop())
         } else {
             Integer::U32(x)
         }
@@ -283,11 +260,11 @@ impl From<u64> for Integer {
         if x < 24 {
             Integer::U5(ZeroTo23::from(x))
         } else if x < 0x100 {
-            Integer::U8(x.truncate())
+            Integer::U8(x.chop())
         } else if x < 0x10000 {
-            Integer::U16(x.truncate())
+            Integer::U16(x.chop())
         } else if x < 0x100000000 {
-            Integer::U32(x.truncate())
+            Integer::U32(x.chop())
         } else {
             Integer::U64(x)
         }
@@ -331,9 +308,9 @@ impl From<i32> for Integer {
         } else if x > -25 {
             Integer::N5(ZeroTo23::from(-1 - x))
         } else if x > -0x101 {
-            Integer::N8((-1 - x).truncate())
+            Integer::N8((-1 - x).chop())
         } else if x > -0x10001 {
-            Integer::N16((-1 - x).truncate())
+            Integer::N16((-1 - x).chop())
         } else {
             Integer::N32((-1 - x) as u32)
         }
@@ -347,11 +324,11 @@ impl From<i64> for Integer {
         } else if x > -25 {
             Integer::N5(ZeroTo23::from(-1 - x))
         } else if x > -0x101 {
-            Integer::N8((-1 - x).truncate())
+            Integer::N8((-1 - x).chop())
         } else if x > -0x10001 {
-            Integer::N16((-1 - x).truncate())
+            Integer::N16((-1 - x).chop())
         } else if x > -0x100000001 {
-            Integer::N32((-1 - x).truncate())
+            Integer::N32((-1 - x).chop())
         } else {
             Integer::N64((-1 - x) as u64)
         }
@@ -372,9 +349,9 @@ impl TryFrom<i128> for Integer {
         if value > u64::MAX as i128 {
             Err(IntOverflowError)
         } else if value > 0 {
-            Ok(Integer::from(u64::truncate_from(value)))
+            Ok(Integer::from(u64::chop_from(value)))
         } else if value > i64::MIN as i128 {
-            Ok(Integer::from(i64::truncate_from(value)))
+            Ok(Integer::from(i64::chop_from(value)))
         } else if value < -18446744073709551616 {
             // won't fit in 64 bits after offset from -1
             Err(IntOverflowError)
@@ -384,7 +361,7 @@ impl TryFrom<i128> for Integer {
             // Value is negative, and is outside the range
             // that i64 can store. So we know that the
             // canonical representation needs 8 bytes.
-            Ok(Integer::N64(nvalue.truncate()))
+            Ok(Integer::N64(nvalue.chop()))
         }
     }
 }

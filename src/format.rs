@@ -1,4 +1,3 @@
-use crate::truncate::Truncate;
 use crate::{
     Array, ByteString, CborType, Decode, DecodeError, DecodeSymbolic, Encode, EncodeSymbolic,
     Float, Indefinite, Integer, Map, Tag, Tagged, TextString, ZeroTo23,
@@ -9,6 +8,7 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 #[cfg(feature = "display")]
 use strum_macros::AsRefStr;
+use truncate_integer::Chop;
 
 /// The major number in a CBOR encoding
 ///
@@ -786,18 +786,18 @@ fn encode_length(major: Major, len: usize) -> Element {
 // It is correct for arrays or maps.
 fn encode_immediate(major: Major, len: u64) -> Element {
     if len < 24 {
-        Element::new(major, AdnInfo(len.truncate()), ImmediateValue::Empty)
+        Element::new(major, AdnInfo(len.chop()), ImmediateValue::Empty)
     } else if len < 0x100 {
         // 1 byte needed to express length.
-        let len: u8 = len.truncate();
+        let len: u8 = len.chop();
         Element::new(major, AdnInfo::MORE1, len.into())
     } else if len < 0x10000 {
         // 2 bytes needed to express length.
-        let len: u16 = len.truncate();
+        let len: u16 = len.chop();
         Element::new(major, AdnInfo::MORE2, len.into())
     } else if len < 0x100000000 {
         // 4 bytes needed to express length.
-        let len: u32 = len.truncate();
+        let len: u32 = len.chop();
         Element::new(major, AdnInfo::MORE4, len.into())
     } else {
         // 8 bytes needed to express length.

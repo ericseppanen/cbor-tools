@@ -11,7 +11,7 @@ where
     Source: Truncate<Dest>,
 {
     fn truncate_from(x: Source) -> Self {
-        let result: Self = x.truncate();
+        let result: Self = x.chop();
         result
     }
 }

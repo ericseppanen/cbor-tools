@@ -20,6 +20,7 @@ half = "1.8.2"
 num_enum = "0.5"
 strum_macros = "0.23.1"
 hex_fmt = "0.3"
+truncate-integer = "0.5.0"
 
 [dev-dependencies]
 hex-literal = "0.3"
