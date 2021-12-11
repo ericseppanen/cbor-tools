@@ -239,10 +239,10 @@ fn bytestring() {
 
     // indefinite length from RFC 7049: (_ h'0102', h'030405')
     let expected = vec![vec![1u8, 2], vec![3u8, 4, 5]];
-    let expected = expected.into_iter().map(|x| ByteString::from(x)).collect();
+    let expected = expected.into_iter().map(ByteString::from).collect();
     let expected = CborType::Indefinite(Indefinite::ByteString(expected));
     let buf = &hex!("5f 42 0102 43 030405 ff");
-    assert_eq!(buf.decode(), Ok(vec![CborType::from(expected)]));
+    assert_eq!(buf.decode(), Ok(vec![expected]));
 
     // A bytestring that is truncated
     assert_eq!(
@@ -297,10 +297,10 @@ fn textstring() {
 
     // indefinite length from RFC 7049: (_ "strea", "ming")
     let expected = vec!["strea", "ming"];
-    let expected = expected.into_iter().map(|s| TextString::from(s)).collect();
+    let expected = expected.into_iter().map(TextString::from).collect();
     let expected = CborType::Indefinite(Indefinite::TextString(expected));
     let buf = &hex!("7f 65 7374726561 64 6d696e67 ff");
-    assert_eq!(buf.decode(), Ok(vec![CborType::from(expected)]));
+    assert_eq!(buf.decode(), Ok(vec![expected]));
 
     // string with bad UTF-8
     let bad_input = &hex!("64 fdd00000")[..];
@@ -475,10 +475,7 @@ fn floats() {
     assert_decode(&hex!("f9 7bff"), &CborType::from(65504.0));
     assert_decode(&hex!("fa 47c35000"), &CborType::from(100000.0));
 
-    assert_decode(
-        &hex!("fa 7f7fffff"),
-        &CborType::from(3.4028234663852886e+38),
-    );
+    assert_decode(&hex!("fa 7f7fffff"), &CborType::from(3.4028234663852886e38));
     assert_decode(&hex!("fb 7e37e43c8800759c"), &CborType::from(1.0e+300));
     assert_decode(&hex!("f9 0001"), &CborType::from(5.960464477539063e-8));
 

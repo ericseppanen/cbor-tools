@@ -648,7 +648,7 @@ fn decode_imm(element: &mut Element, buf: &mut &[u8]) -> Result<(), DecodeError>
 
 impl DecodeSymbolic for [u8] {
     fn decode_symbolic(&self) -> Result<Vec<Element>, DecodeError> {
-        let mut remaining = &self[..];
+        let mut remaining = self;
         let mut result = Vec::new();
         loop {
             if remaining.is_empty() {
@@ -670,7 +670,7 @@ impl DecodeSymbolic for [u8] {
                         Ok(length) => {
                             // This is a definite-length encoding;
                             // take that many more bytes as payload.
-                            let (head, tail) = try_split(&mut remaining, length)?;
+                            let (head, tail) = try_split(remaining, length)?;
                             element.bytes = head.into();
                             remaining = tail;
                         }
@@ -811,7 +811,7 @@ fn encode_bytestring(bstr: &ByteString) -> Vec<Element> {
     vec![element]
 }
 
-fn encode_indef_bytestring(list: &Vec<ByteString>) -> Vec<Element> {
+fn encode_indef_bytestring(list: &[ByteString]) -> Vec<Element> {
     let mut elements = Vec::with_capacity(1 + list.len());
     elements.push(Element::simple(Major::Bstr, AdnInfo::INDEFINITE));
     for bstr in list {
@@ -828,7 +828,7 @@ fn encode_textstring(text: &TextString) -> Vec<Element> {
     vec![element]
 }
 
-fn encode_indef_textstring(list: &Vec<TextString>) -> Vec<Element> {
+fn encode_indef_textstring(list: &[TextString]) -> Vec<Element> {
     let mut elements = Vec::with_capacity(1 + list.len());
     elements.push(Element::simple(Major::Tstr, AdnInfo::INDEFINITE));
     for text in list {
@@ -885,8 +885,7 @@ fn encode_float(f: &Float) -> Vec<Element> {
 
 fn encode_tagged(x: &Tagged) -> Vec<Element> {
     let tag = encode_immediate(Major::Tag, x.tag.0);
-    let mut v = Vec::<Element>::new();
-    v.push(tag);
+    let mut v = vec![tag];
     v.extend(x.child.encode_symbolic());
     v
 }
