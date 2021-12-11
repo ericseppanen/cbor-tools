@@ -67,16 +67,19 @@
 #![warn(clippy::cast_possible_truncation)]
 
 use half::f16;
+use std::convert::TryInto;
 use std::fmt;
 use std::{convert::TryFrom, ops::Deref};
 
+use crate::truncate::{Truncate, TruncateFrom};
+
+#[cfg(feature = "display")]
+mod display;
 /// Specifies the exact binary format of CBOR data.
 pub mod format;
 #[doc(hidden)]
 pub mod test_util;
-
-#[cfg(feature = "display")]
-mod display;
+mod truncate;
 
 /// CBOR Integer type
 ///
@@ -187,15 +190,41 @@ impl fmt::Debug for Integer {
 #[derive(Copy, Clone, PartialEq)]
 pub struct ZeroTo23(u8);
 
-impl ZeroTo23 {
+impl From<u8> for ZeroTo23 {
     /// Create a new ZeroTo23.
     ///
     /// Will panic if the input is outside the expected range.
-    pub fn new(x: u8) -> Self {
+    fn from(x: u8) -> Self {
         if x >= 24 {
             panic!("too big for ZeroTo23::new()");
         }
         ZeroTo23(x)
+    }
+}
+
+impl From<i8> for ZeroTo23 {
+    /// Create a new ZeroTo23.
+    ///
+    /// Will panic if the input is outside the expected range.
+    fn from(x: i8) -> Self {
+        let x: u8 = x.try_into().unwrap();
+        if x >= 24 {
+            panic!("too big for ZeroTo23::new()");
+        }
+        ZeroTo23(x)
+    }
+}
+
+impl<I> From<I> for ZeroTo23
+where
+    I: Truncate<u8>,
+{
+    /// Create a new ZeroTo23.
+    ///
+    /// Will panic if the input is outside the expected range.
+    fn from(x: I) -> Self {
+        let x: u8 = x.truncate();
+        ZeroTo23::from(x)
     }
 }
 
@@ -216,7 +245,7 @@ impl Deref for ZeroTo23 {
 impl From<u8> for Integer {
     fn from(x: u8) -> Self {
         if x < 24 {
-            Integer::U5(ZeroTo23::new(x))
+            Integer::U5(ZeroTo23::from(x))
         } else {
             Integer::U8(x)
         }
@@ -225,8 +254,10 @@ impl From<u8> for Integer {
 
 impl From<u16> for Integer {
     fn from(x: u16) -> Self {
-        if x < 0x100 {
-            Integer::from(x as u8)
+        if x < 24 {
+            Integer::U5(ZeroTo23::from(x))
+        } else if x < 0x100 {
+            Integer::from(x.truncate())
         } else {
             Integer::U16(x)
         }
@@ -235,10 +266,12 @@ impl From<u16> for Integer {
 
 impl From<u32> for Integer {
     fn from(x: u32) -> Self {
-        if x < 0x100 {
-            Integer::from(x as u8)
+        if x < 24 {
+            Integer::U5(ZeroTo23::from(x))
+        } else if x < 0x100 {
+            Integer::U8(x.truncate())
         } else if x < 0x10000 {
-            Integer::from(x as u16)
+            Integer::U16(x.truncate())
         } else {
             Integer::U32(x)
         }
@@ -247,12 +280,14 @@ impl From<u32> for Integer {
 
 impl From<u64> for Integer {
     fn from(x: u64) -> Self {
-        if x < 0x100 {
-            Integer::from(x as u8)
+        if x < 24 {
+            Integer::U5(ZeroTo23::from(x))
+        } else if x < 0x100 {
+            Integer::U8(x.truncate())
         } else if x < 0x10000 {
-            Integer::from(x as u16)
+            Integer::U16(x.truncate())
         } else if x < 0x100000000 {
-            Integer::from(x as u32)
+            Integer::U32(x.truncate())
         } else {
             Integer::U64(x)
         }
@@ -264,7 +299,7 @@ impl From<i8> for Integer {
         if x >= 0 {
             Integer::from(x as u8)
         } else if x > -25 {
-            Integer::N5(ZeroTo23::new((-1 - x) as u8))
+            Integer::N5(ZeroTo23::from(-1 - x))
         } else {
             Integer::N8((-1 - x) as u8)
         }
@@ -276,9 +311,13 @@ impl From<i16> for Integer {
         if x >= 0 {
             Integer::from(x as u16)
         } else if x > -25 {
-            Integer::N5(ZeroTo23::new((-1 - x) as u8))
+            // Should never overflow, but panic if it does.
+            //let val: u8 = (-1 - x).try_into().unwrap();
+            Integer::N5(ZeroTo23::from(-1 - x))
         } else if x > -0x101 {
-            Integer::N8((-1 - x) as u8)
+            // Should never overflow, but panic if it does.
+            let val: u8 = (-1 - x).try_into().unwrap();
+            Integer::N8(val)
         } else {
             Integer::N16((-1 - x) as u16)
         }
@@ -290,11 +329,11 @@ impl From<i32> for Integer {
         if x >= 0 {
             Integer::from(x as u32)
         } else if x > -25 {
-            Integer::N5(ZeroTo23::new((-1 - x) as u8))
+            Integer::N5(ZeroTo23::from(-1 - x))
         } else if x > -0x101 {
-            Integer::N8((-1 - x) as u8)
+            Integer::N8((-1 - x).truncate())
         } else if x > -0x10001 {
-            Integer::N16((-1 - x) as u16)
+            Integer::N16((-1 - x).truncate())
         } else {
             Integer::N32((-1 - x) as u32)
         }
@@ -306,13 +345,13 @@ impl From<i64> for Integer {
         if x >= 0 {
             Integer::from(x as u64)
         } else if x > -25 {
-            Integer::N5(ZeroTo23::new((-1 - x) as u8))
+            Integer::N5(ZeroTo23::from(-1 - x))
         } else if x > -0x101 {
-            Integer::N8((-1 - x) as u8)
+            Integer::N8((-1 - x).truncate())
         } else if x > -0x10001 {
-            Integer::N16((-1 - x) as u16)
+            Integer::N16((-1 - x).truncate())
         } else if x > -0x100000001 {
-            Integer::N32((-1 - x) as u32)
+            Integer::N32((-1 - x).truncate())
         } else {
             Integer::N64((-1 - x) as u64)
         }
@@ -333,9 +372,9 @@ impl TryFrom<i128> for Integer {
         if value > u64::MAX as i128 {
             Err(IntOverflowError)
         } else if value > 0 {
-            Ok(Integer::from(value as u64))
+            Ok(Integer::from(u64::truncate_from(value)))
         } else if value > i64::MIN as i128 {
-            Ok(Integer::from(value as i64))
+            Ok(Integer::from(i64::truncate_from(value)))
         } else if value < -18446744073709551616 {
             // won't fit in 64 bits after offset from -1
             Err(IntOverflowError)
@@ -345,7 +384,7 @@ impl TryFrom<i128> for Integer {
             // Value is negative, and is outside the range
             // that i64 can store. So we know that the
             // canonical representation needs 8 bytes.
-            Ok(Integer::N64(nvalue as u64))
+            Ok(Integer::N64(nvalue.truncate()))
         }
     }
 }
@@ -370,6 +409,8 @@ impl From<f32> for Float {
 
 impl From<f64> for Float {
     fn from(x: f64) -> Self {
+        // Attempt to truncate the value to see if it's the same value.
+        #[allow(clippy::cast_possible_truncation)]
         let x32 = x as f32;
         let x64 = x32 as f64;
         if x64 == x {
