@@ -15,7 +15,7 @@ use truncate_integer::Chop;
 /// The major number is 3 bits long, and identifies the basic
 /// type of a CBOR-encoded value.
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFromPrimitive)]
 #[cfg_attr(feature = "display", derive(AsRefStr))]
 pub enum Major {
     /// An unsigned integer
@@ -88,7 +88,7 @@ impl From<u8> for AdnInfo {
 /// the case of integers or floats).
 ///
 /// The contained array is in big-endian format.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImmediateValue {
     /// No immediate value.
     Empty,
@@ -199,7 +199,7 @@ const AS_INDEF: UseDefLen = UseDefLen(false);
 /// See RFC 7049 for details.
 ///
 /// Some [`CborType`] values will require multiple [`Element`]s to encode.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Element {
     // The major number.
     pub(crate) major: Major,
@@ -615,25 +615,25 @@ fn decode_imm(element: &mut Element, buf: &mut &[u8]) -> Result<(), DecodeError>
 
     match element.adn_info {
         AdnInfo::MORE1 => {
-            let (head, tail) = try_split(*buf, 1)?;
+            let (head, tail) = try_split(buf, 1)?;
             let imm: [u8; 1] = head.as_ref().try_into().unwrap();
             element.imm = ImmediateValue::Bytes1(imm);
             *buf = tail;
         }
         AdnInfo::MORE2 => {
-            let (head, tail) = try_split(*buf, 2)?;
+            let (head, tail) = try_split(buf, 2)?;
             let imm: [u8; 2] = head.as_ref().try_into().unwrap();
             element.imm = ImmediateValue::Bytes2(imm);
             *buf = tail;
         }
         AdnInfo::MORE4 => {
-            let (head, tail) = try_split(*buf, 4)?;
+            let (head, tail) = try_split(buf, 4)?;
             let imm: [u8; 4] = head.as_ref().try_into().unwrap();
             element.imm = ImmediateValue::Bytes4(imm);
             *buf = tail;
         }
         AdnInfo::MORE8 => {
-            let (head, tail) = try_split(*buf, 8)?;
+            let (head, tail) = try_split(buf, 8)?;
             let imm: [u8; 8] = head.as_ref().try_into().unwrap();
             element.imm = ImmediateValue::Bytes8(imm);
             *buf = tail;
@@ -801,7 +801,6 @@ fn encode_immediate(major: Major, len: u64) -> Element {
         Element::new(major, AdnInfo::MORE4, len.into())
     } else {
         // 8 bytes needed to express length.
-        let len = len as u64;
         Element::new(major, AdnInfo::MORE8, len.into())
     }
 }
@@ -893,7 +892,7 @@ fn encode_tagged(x: &Tagged) -> Vec<Element> {
 
 impl Encode for Vec<Element> {
     fn encode(&self) -> Vec<u8> {
-        self.iter().map(Encode::encode).flatten().collect()
+        self.iter().flat_map(Encode::encode).collect()
     }
 }
 

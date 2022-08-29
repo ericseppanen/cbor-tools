@@ -101,7 +101,7 @@ pub mod test_util;
 ///
 /// Note: integers outside the range of [-2^64, 2^64-1] should be encoded
 /// as byte strings instead.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Integer {
     /// A value between 0 and 23.
     U5(ZeroTo23), // FIXME: use some bit-field crate?
@@ -186,7 +186,7 @@ impl fmt::Debug for Integer {
 }
 
 /// An integer value in the range 0 to 23, inclusive.
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct ZeroTo23(u8);
 
 impl<T> From<T> for ZeroTo23
@@ -410,7 +410,7 @@ impl From<f64> for Float {
 /// assert_eq!(CborType::from(val).encode(), vec![0x44, 1, 2, 3, 4]);
 /// ```
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ByteString(pub Vec<u8>);
 
 impl<T> From<T> for ByteString
@@ -433,7 +433,7 @@ where
 /// assert_eq!(CborType::from(val).encode(), vec![0x64, 0x46, 0x6f, 0x6f, 0x21]);
 /// ```
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TextString(pub String);
 
 impl<T> From<T> for TextString
@@ -529,7 +529,7 @@ pub struct Tagged {
 /// type confusion when passing them as function arguments.
 ///
 /// See RFC 7049 2.4 for details.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Tag(u64);
 
 #[allow(missing_docs)]
@@ -726,7 +726,7 @@ pub trait EncodeSymbolic {
 }
 
 /// An error that may occur when decoding CBOR Data.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DecodeError {
     /// No more CBOR items are available in the input data.
     End,
@@ -763,8 +763,7 @@ pub trait DecodeSymbolic {
 impl EncodeSymbolic for Vec<CborType> {
     fn encode_symbolic(&self) -> Vec<format::Element> {
         self.iter()
-            .map(EncodeSymbolic::encode_symbolic)
-            .flatten()
+            .flat_map(EncodeSymbolic::encode_symbolic)
             .collect()
     }
 }
@@ -772,8 +771,7 @@ impl EncodeSymbolic for Vec<CborType> {
 impl Encode for Vec<CborType> {
     fn encode(&self) -> Vec<u8> {
         self.iter()
-            .map(|x| x.encode_symbolic().encode())
-            .flatten()
+            .flat_map(|x| x.encode_symbolic().encode())
             .collect()
     }
 }

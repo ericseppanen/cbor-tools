@@ -57,7 +57,7 @@ fn byte_strings() {
     );
 
     // A 256-byte array
-    let v: Vec<u8> = (1..9).into_iter().collect::<Vec<u8>>().repeat(32);
+    let v: Vec<u8> = (1..9).collect::<Vec<u8>>().repeat(32);
     assert_eq!(v.len(), 256);
     let buf = CborType::from(&v[..]).encode();
     assert_eq!(&buf[..3], hex!("59 0100"));
@@ -231,7 +231,7 @@ fn arrays() {
         hex!("8301820203820405")
     );
 
-    let twentyfive: Vec<u32> = (1..26).into_iter().collect();
+    let twentyfive: Vec<u32> = (1..26).collect();
     let expected = hex!("98190102030405060708090a0b0c0d0e0f101112131415161718181819");
     assert_eq!(CborType::from(twentyfive.clone()).encode(), expected);
 

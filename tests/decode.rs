@@ -364,7 +364,7 @@ fn arrays() {
     let def_deep = CborType::from(deep.clone());
     assert_decode(&hex!("8301820203820405"), &def_deep);
 
-    let twentyfive: Vec<u32> = (1..26).into_iter().collect();
+    let twentyfive: Vec<u32> = (1..26).collect();
     let def_twentyfive = CborType::from(twentyfive.clone());
     let buf = hex!("98190102030405060708090a0b0c0d0e0f101112131415161718181819");
     assert_decode(&buf, &def_twentyfive);
