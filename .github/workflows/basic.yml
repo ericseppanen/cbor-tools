@@ -1,0 +1,22 @@
+name: test suite
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: stable checks and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo check --all-features --all-targets
+      - run: cargo clippy --all-features --all-targets
+      - run: cargo test --all-features
+      - run: cargo fmt --check
+
+  check-msrv:
+    name: msrv check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.46
+      - run: cargo check --all-features --all-targets
