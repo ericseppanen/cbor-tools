@@ -9,7 +9,7 @@ readme = "README.md"
 keywords = ["cbor"]
 categories = ["encoding"]
 edition = "2018"
-rust-version = "1.46"
+rust-version = "1.56"
 
 [features]
 default=["display"]
